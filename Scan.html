@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HelportAI Attendance System</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#9aa4b2;--accent:#06b6d4}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    body{background:linear-gradient(180deg,#04c966 0%, #071025 100%);color:#e6eef6;display:flex;align-items:center;justify-content:center;padding:20px}
+    .app{width:100%;max-width:980px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:18px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    header{display:flex;gap:16px;align-items:center;margin-bottom:12px}
+    header h1{font-size:18px;margin:0}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .primary{border-color:var(--accent);box-shadow:0 6px 18px rgba(6,182,212,0.08)}
+    .layout{display:grid;grid-template-columns:1fr 360px;gap:14px}
+    .card{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px;min-height:320px}
+    #video{width:100%;height:100%;border-radius:8px;background:#000;object-fit:cover}
+    .preview-wrap{position:relative;display:flex;flex-direction:column;gap:8px}
+    .scanner-info{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px}
+    .log{max-height:420px;overflow:auto;margin-top:8px}
+    .entry{padding:8px;border-radius:8px;border:1px dashed rgba(255,255,255,0.02);margin-bottom:8px}
+    .entry small{color:var(--muted)}
+    input[type=file]{display:none}
+    .tag{background:rgba(255,255,255,0.03);padding:6px 8px;border-radius:999px;font-size:12px}
+    .flex{display:flex;gap:8px;align-items:center}
+    .select{padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit}
+    footer{margin-top:12px;color:var(--muted);font-size:13px}
+    @media (max-width:880px){.layout{grid-template-columns:1fr;}.card{min-height:260px}}
+
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>HelportAI Attendance System</h1>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span class="tag">AI Generated</span>
+      </div>
+    </header>
+
+    <div class="controls">
+      <button id="startBtn" class="primary">Start camera</button>
+      <button id="stopBtn">Stop</button>
+      <label class="flex" title="Upload image to scan">
+        <input id="fileInput" type="file" accept="image/*"><button>Scan image</button>
+      </label>
+      <select id="facingSelect" class="select">
+        <option value="environment">Rear (preferred)</option>
+        <option value="user">Front</option>
+      </select>
+      <button id="clearLog">Clear log</button>
+      <button id="exportCsv">Export CSV</button>
+    </div>
+
+    <div class="layout" style="margin-top:12px">
+      <section class="card">
+        <div class="preview-wrap">
+          <div style="position:relative;aspect-ratio:16/9;overflow:hidden;border-radius:8px">
+            <video id="video" autoplay muted playsinline></video>
+            <canvas id="overlay" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"></canvas>
+          </div>
+
+          <div class="scanner-info">
+            <div><strong id="lastResult">No QR detected yet</strong></div>
+            <div class="flex"><small id="status">Idle</small></div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:8px;align-items:center">
+            <label class="flex"><input id="soundToggle" type="checkbox"> Beep on scan</label>
+            <label class="flex"><input id="autoCopy" type="checkbox"> Auto-copy</label>
+            <label class="flex"><input id="autoOpen" type="checkbox"> Auto-open link</label>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong>Scan log</strong>
+          <small class="muted">Stored in localStorage</small>
+        </div>
+        <div id="log" class="log"></div>
+      </aside>
+    </div>
+
+    <footer>
+      Tips: Run this on a secure origin (https or localhost). Works best on Chrome / Edge.
+    </footer>
+  </div>
+
+  <audio id="beep" src="qpal.mp3" preload="auto"></audio>
+
+  <script>
+    const startBtn=document.getElementById('startBtn'),
+          stopBtn=document.getElementById('stopBtn'),
+          video=document.getElementById('video'),
+          overlay=document.getElementById('overlay'),
+          ctx=overlay.getContext('2d'),
+          status=document.getElementById('status'),
+          lastResult=document.getElementById('lastResult'),
+          logEl=document.getElementById('log'),
+          fileInput=document.getElementById('fileInput'),
+          facingSelect=document.getElementById('facingSelect'),
+          beep=document.getElementById('beep'),
+          soundToggle=document.getElementById('soundToggle'),
+          autoCopy=document.getElementById('autoCopy'),
+          autoOpen=document.getElementById('autoOpen'),
+          clearLogBtn=document.getElementById('clearLog'),
+          exportCsvBtn=document.getElementById('exportCsv');
+
+    let stream=null, rafId=null, barcodeDetector=null, fallbackJsQR=null, scanning=false;
+    const LOG_KEY='qr-scanner-log-v1';
+
+    function saveLogItem(d){
+        let log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+        // Check if entry for today exists
+        const today = new Date().toLocaleDateString();
+        let entry = log.find(e => e.text === d.text && e.date === today);
+        if (!entry) {
+            // Log In
+            entry = {...d, date: today, logIn: new Date().toLocaleTimeString(), logOut: ''};
+            log.unshift(entry);
+        } else {
+            // Log Out
+            entry.logOut = new Date().toLocaleTimeString();
+        }
+        localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(0,200)));
+        renderLog();
+    }
+
+    function renderLog(){
+        const l = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+        logEl.innerHTML = l.map(i => `
+            <div class="entry">
+                <div><strong>${escapeHtml(i.text)}</strong></div>
+                <small>Date: ${i.date} • Log In: ${i.logIn} • Log Out: ${i.logOut} • ${i.type}</small>
+            </div>
+        `).join('');
+    }
+
+    function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}
+
+    async function initBarcodeDetector(){
+        if('BarcodeDetector' in window){
+            const f = await window.BarcodeDetector.getSupportedFormats().catch(()=>[]);
+            if(f.includes('qr_code')) barcodeDetector = new BarcodeDetector({formats:['qr_code']});
+        }
+        if(!barcodeDetector) await loadJsQR();
+    }
+
+    function loadJsQR(){
+        if(fallbackJsQR) return Promise.resolve();
+        return new Promise((res,rej)=>{
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+            s.onload = ()=>{fallbackJsQR = window.jsQR; res()};
+            s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    }
+
+    async function startCamera(){
+        if(scanning) return;
+        await initBarcodeDetector();
+        const f = facingSelect.value || 'environment';
+        try{
+            stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:f}});
+            video.srcObject = stream;
+            await video.play();
+            overlay.width = video.videoWidth || 640;
+            overlay.height = video.videoHeight || 360;
+            scanning = true;
+            status.textContent='Scanning...';
+            tick();
+        }catch(e){
+            status.textContent='Camera unavailable';
+            alert('Unable to access camera');
+        }
+    }
+
+    function stopCamera(){
+        scanning=false;
+        status.textContent='Stopped';
+        if(rafId) cancelAnimationFrame(rafId);
+        if(stream){stream.getTracks().forEach(t=>t.stop()); stream=null;}
+        ctx.clearRect(0,0,overlay.width,overlay.height);
+    }
+
+    async function tick(){
+        if(!scanning) return;
+        if(video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA){
+            overlay.width = video.videoWidth;
+            overlay.height = video.videoHeight;
+            ctx.drawImage(video,0,0,overlay.width,overlay.height);
+
+            if(barcodeDetector){
+                try{
+                    const b = await createImageBitmap(overlay);
+                    const r = await barcodeDetector.detect(b);
+                    if(r && r.length){drawBoxes(r.map(e=>e.boundingBox)); handleResult(r[0].rawValue,'camera');}
+                    else clearOverlay();
+                    b.close();
+                }catch(err){if(!fallbackJsQR) await loadJsQR();}
+            } else if(fallbackJsQR){
+                const i = ctx.getImageData(0,0,overlay.width,overlay.height);
+                const c = fallbackJsQR(i.data,i.width,i.height);
+                if(c){drawPolygon(c.location); handleResult(c.data,'camera');} else clearOverlay();
+            }
+        }
+        rafId=requestAnimationFrame(tick);
+    }
+
+    function drawBoxes(b){ctx.strokeStyle='#00ffcc'; ctx.lineWidth=Math.max(2,overlay.width/400); b.forEach(x=>{ctx.beginPath(); ctx.rect(x.x,x.y,x.width,x.height); ctx.stroke();});}
+    function drawPolygon(l){ctx.strokeStyle='#00ffcc'; ctx.lineWidth=Math.max(2,overlay.width/400); ctx.beginPath(); ctx.moveTo(l.topLeftCorner.x,l.topLeftCorner.y); ctx.lineTo(l.topRightCorner.x,l.topRightCorner.y); ctx.lineTo(l.bottomRightCorner.x,l.bottomRightCorner.y); ctx.lineTo(l.bottomLeftCorner.x,l.bottomLeftCorner.y); ctx.closePath(); ctx.stroke();}
+    function clearOverlay(){ctx.clearRect(0,0,overlay.width,overlay.height);}
+
+    let lastSeen=null;
+    function handleResult(t,type){
+        if(!t) return;
+        const n = new Date();
+        if(lastSeen && lastSeen.text === t && (n - lastSeen.time) < 2500) return;
+        lastSeen={text:t,time:n};
+        lastResult.textContent=t;
+        status.textContent='Detected';
+        saveLogItem({text:t,type:type});
+        if(soundToggle.checked) try{beep.currentTime=0;beep.play()}catch{}
+        if(autoCopy.checked) navigator.clipboard && navigator.clipboard.writeText(t);
+        if(autoOpen.checked && /^https?:\/\//i.test(t)) window.open(t,'_blank');
+    }
+
+    fileInput.addEventListener('change', async e=>{
+        const f = e.target.files && e.target.files[0]; if(!f) return;
+        const img = new Image();
+        img.onload = async ()=>{
+            overlay.width = img.naturalWidth; overlay.height = img.naturalHeight;
+            ctx.drawImage(img,0,0,overlay.width,overlay.height);
+            if(!barcodeDetector && !fallbackJsQR) await loadJsQR();
+            if(barcodeDetector){
+                try{
+                    const b = await createImageBitmap(overlay);
+                    const r = await barcodeDetector.detect(b);
+                    if(r && r.length) handleResult(r[0].rawValue,'image'); else alert('No QR found'); b.close();
+                }catch(e){}
+            } else if(fallbackJsQR){
+                const d = ctx.getImageData(0,0,overlay.width,overlay.height);
+                const c = fallbackJsQR(d.data,d.width,d.height);
+                if(c) handleResult(c.data,'image'); else alert('No QR found');
+            }
+        };
+        img.onerror=()=>alert('Invalid image');
+        img.src=URL.createObjectURL(f);
+    });
+
+    startBtn.addEventListener('click',startCamera);
+    stopBtn.addEventListener('click',stopCamera);
+    clearLogBtn.addEventListener('click',()=>{localStorage.removeItem(LOG_KEY); renderLog();});
+    exportCsvBtn.addEventListener('click',()=>{
+        const l = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+        if(!l.length){alert('No entries'); return;}
+        const csv = ['Employee,Date,Log In,Log Out,Type',...l.map(r=>`"${(r.text||'').replace(/"/g,'""')}","${r.date}","${r.logIn}","${r.logOut}","${r.type}"`)].join('\n');
+        const blob = new Blob([csv],{type:'text/csv'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'attendance-log.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    renderLog();
+    window.addEventListener('pagehide',()=>stopCamera());
+  </script>
+</body>
+</html>
