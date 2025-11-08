@@ -93,50 +93,92 @@ function drawPolygon(l){ctx.strokeStyle='#00ffcc'; ctx.lineWidth=Math.max(2,over
 function clearOverlay(){ctx.clearRect(0,0,overlay.width,overlay.height);}
 
 let lastSeen=null;
-function handleResult(t,type){
-    if(!t) return;
-    const n = new Date();
-    if(lastSeen && lastSeen.text === t && (n - lastSeen.time) < 2500) return;
-    lastSeen={text:t,time:n};
-    lastResult.textContent=t;
-    status.textContent='Detected';
+function handleResult(t, type) {
+    if (!t) return;
+    const now = new Date();
 
-    // 📸 capture snapshot
+    // Avoid rapid duplicate scans (within 2.5 seconds)
+    if (lastSeen && lastSeen.text === t && (now - lastSeen.time) < 2500) return;
+    lastSeen = { text: t, time: now };
+    lastResult.textContent = t;
+    status.textContent = 'Detected';
+
+    // 📸 Capture a fresh snapshot every scan
     const snapshotCanvas = document.createElement('canvas');
     snapshotCanvas.width = video.videoWidth;
     snapshotCanvas.height = video.videoHeight;
     const snapCtx = snapshotCanvas.getContext('2d');
-    snapCtx.drawImage(video,0,0,video.videoWidth,video.videoHeight);
-    const snapshotData = snapshotCanvas.toDataURL('image/jpeg',0.85);
+    snapCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+    const snapshotData = snapshotCanvas.toDataURL('image/jpeg', 0.9); // better quality
 
-    saveLogItem({text:t,type:type,snapshot:snapshotData});
+    // Save scan result with the latest snapshot
+    saveLogItem({
+        text: t,
+        type: type,
+        snapshot: snapshotData
+    });
 
-    if(soundToggle.checked) try{beep.currentTime=0;beep.play()}catch{}
-    if(autoCopy.checked) navigator.clipboard && navigator.clipboard.writeText(t);
-    if(autoOpen.checked && /^https?:\/\//i.test(t)) window.open(t,'_blank');
+    // Play beep sound
+    if (soundToggle.checked) {
+        try { beep.currentTime = 0; beep.play(); } catch { }
+    }
+
+    // Auto-copy detected text
+    if (autoCopy.checked && navigator.clipboard) {
+        navigator.clipboard.writeText(t);
+    }
+
+    // Auto-open links
+    if (autoOpen.checked && /^https?:\/\//i.test(t)) {
+        window.open(t, '_blank');
+    }
 }
 
-function saveLogItem(d){
+
+function saveLogItem(d) {
     let log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
     const today = new Date().toLocaleDateString();
-    let entry = log.find(e => e.text === d.text && e.date === today);
-    if (!entry) {
-        entry = {...d, date: today, logIn: new Date().toLocaleTimeString(), logOut: ''};
+    const now = new Date().toLocaleTimeString();
+
+    // Check if the QR code was already scanned today
+    let existing = log.find(e => e.text === d.text && e.date === today);
+
+    if (!existing) {
+        // Create new log entry with fresh snapshot
+        const entry = {
+            ...d,
+            date: today,
+            logIn: now,
+            logOut: '',
+            timestamp: Date.now()
+        };
         log.unshift(entry);
     } else {
-        entry.logOut = new Date().toLocaleTimeString();
+        // Update existing logOut time and snapshot with the latest picture
+        existing.logOut = now;
+        existing.snapshot = d.snapshot; // ✅ Always update to latest snapshot
+        existing.timestamp = Date.now();
     }
-    localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(0,200)));
+
+    // Sort logs so newest is always at the top
+    log.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Keep only the latest 200 entries
+    localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(0, 200)));
+
     renderLog();
 }
 
-function renderLog(){
-    const l = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
-    logEl.innerHTML = l.map(i => `
+
+function renderLog() {
+    const log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    log.sort((a, b) => b.timestamp - a.timestamp);
+
+    logEl.innerHTML = log.map(i => `
         <div class="entry">
             <div><strong>${escapeHtml(i.text)}</strong></div>
             ${i.snapshot ? `<img src="${i.snapshot}" alt="snapshot" style="width:100%;border-radius:8px;margin-top:6px;">` : ''}
-            <small>Date: ${i.date} • Log In: ${i.logIn} • Log Out: ${i.logOut} • ${i.type}</small>
+            <small>Date: ${i.date} • Log In: ${i.logIn} • Log Out: ${i.logOut || '—'} • ${i.type}</small>
         </div>
     `).join('');
 }
@@ -169,11 +211,47 @@ fileInput.addEventListener('change', async e=>{
 startBtn.addEventListener('click',startCamera);
 stopBtn.addEventListener('click',stopCamera);
 clearLogBtn.addEventListener('click',()=>{localStorage.removeItem(LOG_KEY); renderLog();});
-exportCsvBtn.addEventListener('click',()=>{
-    const l = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
-    if(!l.length){alert('No entries'); return;}
-    const csv = ['Employee,Date,Log In,Log Out,Type',...l.map(r=>`"${(r.text||'').replace(/"/g,'""')}","${r.date}","${r.logIn}","${r.logOut}","${r.type}"`)].join('\n');
-    const blob = new Blob([csv],{type:'text/csv'});
+exportCsvBtn.addEventListener('click', () => {
+    const log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    if (!log.length) {
+        alert('No entries');
+        return;
+    }
+
+    // Create CSV header
+    const csvRows = ['EID,Name,Date,Log In,Log Out,Type'];
+
+    log.forEach(r => {
+        let name = '';
+        let eid = '';
+
+        // Try to split text automatically
+        const text = r.text || '';
+        if (text.includes('-')) {
+            // Format: E1234 - John Doe
+            [eid, name] = text.split('-').map(x => x.trim());
+        } else if (text.includes(',')) {
+            // Format: 1234, John Doe
+            [eid, name] = text.split(',').map(x => x.trim());
+        } else {
+            // If not formatted, put everything in Name
+            name = text.trim();
+        }
+
+        const row = [
+            `"${eid.replace(/"/g, '""')}"`,
+            `"${name.replace(/"/g, '""')}"`,
+            `"${r.date}"`,
+            `"${r.logIn}"`,
+            `"${r.logOut}"`,
+            `"${r.type}"`
+        ].join(',');
+
+        csvRows.push(row);
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -181,6 +259,7 @@ exportCsvBtn.addEventListener('click',()=>{
     a.click();
     URL.revokeObjectURL(url);
 });
+
 
 renderLog();
 window.addEventListener('pagehide',()=>stopCamera());
