@@ -135,16 +135,112 @@ function handleResult(t, type) {
 }
 
 
+// 🗣️ Voice greeting system — random positive messages
+// 🗣️ Speak employee name with a friendly female voice
+function speakEmployeeAction(name, action = "logged in") {
+  if (!('speechSynthesis' in window)) {
+    console.warn("Speech synthesis not supported in this browser.");
+    return;
+  }
+
+  // 🎀 Random greetings (friendly tone)
+  const greetingsIn = [
+    `Hello young stunna ${name}!`,
+    `Good day ${name}!`,
+    `Nice to see you, ${name}!`,
+    `Hello ${name}, great to have you back!`,
+    `Hi ${name}, let's make today amazing!`
+  ];
+
+  const greetingsOut = [
+    `Goodbye ${name}!`,
+    `Bounce kana man?, ${name}!`,
+    `Take care ${name}!`,
+    `Great job today, ${name}!`,
+    `Have a nice day, ${name}!`
+  ];
+
+  // Choose random message depending on login/logout
+  const messageText = action === "logged out"
+    ? greetingsOut[Math.floor(Math.random() * greetingsOut.length)]
+    : greetingsIn[Math.floor(Math.random() * greetingsIn.length)];
+
+  const message = new SpeechSynthesisUtterance(messageText);
+  message.lang = "en-US";
+  message.pitch = 1.2;     // Slightly higher for a feminine tone
+  message.rate = 1;        // Normal speed
+  message.volume = 1;
+
+  // 🎧 Pick a female voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const femaleVoice = voices.find(v =>
+    v.name.toLowerCase().includes("female") ||
+    v.name.toLowerCase().includes("woman") ||
+    v.name.toLowerCase().includes("samantha") || // macOS
+    v.name.toLowerCase().includes("zira") ||     // Windows
+    (v.lang === "en-US" && v.name.toLowerCase().includes("google"))
+  );
+
+  if (femaleVoice) {
+    message.voice = femaleVoice;
+  } else if (voices.length > 0) {
+    // fallback to first available voice
+    message.voice = voices[0];
+  }
+
+  // Some browsers need voices loaded first
+  if (voices.length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => speakEmployeeAction(name, action);
+    return;
+  }
+
+  window.speechSynthesis.speak(message);
+}
+
+
+
 function saveLogItem(d) {
     let log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
     const today = new Date().toLocaleDateString();
     const now = new Date().toLocaleTimeString();
 
-    // Check if the QR code was already scanned today
     let existing = log.find(e => e.text === d.text && e.date === today);
 
+    const text = (d.text || "").trim();
+    let eid = "";
+    let name = "";
+
+    // 🔍 Smart extraction
+    // Case 1: "202500343 - OCINO, RECHELLE"
+    if (text.match(/^\d+\s*[-:]\s*[A-Za-z]/)) {
+        const parts = text.split(/[-:]/);
+        eid = parts[0].trim();
+        name = parts[1] ? parts[1].trim() : "";
+    }
+    // Case 2: "OCINO, RECHELLE - 202500343"
+    else if (text.match(/[A-Za-z].*[-:]\s*\d+$/)) {
+        const parts = text.split(/[-:]/);
+        name = parts[0].trim();
+        eid = parts[1] ? parts[1].trim() : "";
+    }
+    // Case 3: "OCINO, RECHELLE"
+    else if (/[A-Za-z]/.test(text) && !/\d{6,}/.test(text)) {
+        name = text;
+    }
+    // Case 4: "202500343" (numbers only)
+    else if (/^\d+$/.test(text)) {
+        eid = text;
+        name = ""; // no name found
+    }
+    // Case 5: fallback
+    else {
+        name = text;
+    }
+
+    // 🧠 Use only the name for the greeting
+    const spokenName = name && !/^\d+$/.test(name) ? name : "";
+
     if (!existing) {
-        // Create new log entry with fresh snapshot
         const entry = {
             ...d,
             date: today,
@@ -153,21 +249,24 @@ function saveLogItem(d) {
             timestamp: Date.now()
         };
         log.unshift(entry);
+
+        // 🗣️ Speak name only (fallback: generic)
+        speakEmployeeAction(spokenName || "employee", "logged in");
     } else {
-        // Update existing logOut time and snapshot with the latest picture
         existing.logOut = now;
-        existing.snapshot = d.snapshot; // ✅ Always update to latest snapshot
+        existing.snapshot = d.snapshot;
         existing.timestamp = Date.now();
+
+        speakEmployeeAction(spokenName || "employee", "logged out");
     }
 
-    // Sort logs so newest is always at the top
     log.sort((a, b) => b.timestamp - a.timestamp);
-
-    // Keep only the latest 200 entries
     localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(0, 200)));
 
     renderLog();
 }
+
+
 
 
 function renderLog() {
@@ -218,29 +317,24 @@ exportCsvBtn.addEventListener('click', () => {
         return;
     }
 
-    // Create CSV header
     const csvRows = ['EID,Name,Date,Log In,Log Out,Type'];
 
     log.forEach(r => {
         let name = '';
         let eid = '';
 
-        // Try to split text automatically
         const text = r.text || '';
         if (text.includes('-')) {
-            // Format: E1234 - John Doe
             [eid, name] = text.split('-').map(x => x.trim());
         } else if (text.includes(',')) {
-            // Format: 1234, John Doe
-            [eid, name] = text.split(',').map(x => x.trim());
+            [name, eid] = text.split(',').map(x => x.trim());
         } else {
-            // If not formatted, put everything in Name
             name = text.trim();
         }
 
         const row = [
-            `"${eid.replace(/"/g, '""')}"`,
             `"${name.replace(/"/g, '""')}"`,
+            `"${eid.replace(/"/g, '""')}"`,
             `"${r.date}"`,
             `"${r.logIn}"`,
             `"${r.logOut}"`,
@@ -259,7 +353,6 @@ exportCsvBtn.addEventListener('click', () => {
     a.click();
     URL.revokeObjectURL(url);
 });
-
 
 renderLog();
 window.addEventListener('pagehide',()=>stopCamera());
