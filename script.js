@@ -134,70 +134,94 @@ function handleResult(t, type) {
     }
 }
 
-
-// 🗣️ Voice greeting system — random positive messages
-// 🗣️ Speak employee name with a friendly female voice
-function speakEmployeeAction(name, action = "logged in") {
-  if (!('speechSynthesis' in window)) {
-    console.warn("Speech synthesis not supported in this browser.");
-    return;
-  }
-
-  // 🎀 Random greetings (friendly tone)
-  const greetingsIn = [
-    `Hello young stunna ${name}!`,
-    `Good day ${name}!`,
-    `Nice to see you, ${name}!`,
-    `Hello ${name}, great to have you back!`,
-    `Hi ${name}, let's make today amazing!`
-  ];
-
-  const greetingsOut = [
-    `Goodbye ${name}!`,
-    `Bounce kana man?, ${name}!`,
-    `Take care ${name}!`,
-    `Great job today, ${name}!`,
-    `Have a nice day, ${name}!`
-  ];
-
-  // Choose random message depending on login/logout
-  const messageText = action === "logged out"
-    ? greetingsOut[Math.floor(Math.random() * greetingsOut.length)]
-    : greetingsIn[Math.floor(Math.random() * greetingsIn.length)];
-
-  const message = new SpeechSynthesisUtterance(messageText);
-  message.lang = "en-US";
-  message.pitch = 1.2;     // Slightly higher for a feminine tone
-  message.rate = 1;        // Normal speed
-  message.volume = 1;
-
-  // 🎧 Pick a female voice if available
-  const voices = window.speechSynthesis.getVoices();
-  const femaleVoice = voices.find(v =>
-    v.name.toLowerCase().includes("female") ||
-    v.name.toLowerCase().includes("woman") ||
-    v.name.toLowerCase().includes("samantha") || // macOS
-    v.name.toLowerCase().includes("zira") ||     // Windows
-    (v.lang === "en-US" && v.name.toLowerCase().includes("google"))
-  );
-
-  if (femaleVoice) {
-    message.voice = femaleVoice;
-  } else if (voices.length > 0) {
-    // fallback to first available voice
-    message.voice = voices[0];
-  }
-
-  // Some browsers need voices loaded first
-  if (voices.length === 0) {
-    window.speechSynthesis.onvoiceschanged = () => speakEmployeeAction(name, action);
-    return;
-  }
-
-  window.speechSynthesis.speak(message);
+// Function to extract nickname from full name
+function extractNickname(fullName) {
+    if (!fullName) return "employee";
+    
+    // Remove extra spaces and convert to uppercase for consistent processing
+    const cleanName = fullName.trim().toUpperCase();
+    
+    // Common patterns for extracting first name/nickname
+    // Case 1: "OCINO, RECHELLE" -> extract "RECHELLE"
+    if (cleanName.includes(',')) {
+        const parts = cleanName.split(',');
+        if (parts.length > 1) {
+            return parts[1].trim().split(' ')[0]; // Take first word after comma
+        }
+    }
+    
+    // Case 2: "RECHELLE OCINO" -> extract "RECHELLE"
+    if (cleanName.includes(' ')) {
+        return cleanName.split(' ')[0]; // Take first word
+    }
+    
+    // Case 3: Single word name
+    return cleanName;
 }
 
+// 🗣️ Speak employee nickname with a friendly female voice
+function speakEmployeeAction(fullName, action = "logged in") {
+    if (!('speechSynthesis' in window)) {
+        console.warn("Speech synthesis not supported in this browser.");
+        return;
+    }
 
+    // Extract nickname from full name
+    const nickname = extractNickname(fullName);
+    
+    // 🎀 Random greetings (friendly tone) using only nickname
+    const greetingsIn = [
+        `Hello young stunna ${nickname}!`,
+        `Good day ${nickname}!`,
+        `Nice to see you, ${nickname}!`,
+        `Hello ${nickname}, great to have you back!`,
+        `Hi ${nickname}, let's make today amazing!`
+    ];
+
+    const greetingsOut = [
+        `Goodbye ${nickname}!`,
+        `Take care ${nickname}!`,
+        `Great job today, ${nickname}!`,
+        `Have a nice day, ${nickname}!`,
+        `See you tomorrow, ${nickname}!`
+    ];
+
+    // Choose random message depending on login/logout
+    const messageText = action === "logged out"
+        ? greetingsOut[Math.floor(Math.random() * greetingsOut.length)]
+        : greetingsIn[Math.floor(Math.random() * greetingsIn.length)];
+
+    const message = new SpeechSynthesisUtterance(messageText);
+    message.lang = "en-US";
+    message.pitch = 1.2;     // Slightly higher for a feminine tone
+    message.rate = 1;        // Normal speed
+    message.volume = 1;
+
+    // 🎧 Pick a female voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const femaleVoice = voices.find(v =>
+        v.name.toLowerCase().includes("female") ||
+        v.name.toLowerCase().includes("woman") ||
+        v.name.toLowerCase().includes("samantha") || // macOS
+        v.name.toLowerCase().includes("zira") ||     // Windows
+        (v.lang === "en-US" && v.name.toLowerCase().includes("google"))
+    );
+
+    if (femaleVoice) {
+        message.voice = femaleVoice;
+    } else if (voices.length > 0) {
+        // fallback to first available voice
+        message.voice = voices[0];
+    }
+
+    // Some browsers need voices loaded first
+    if (voices.length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => speakEmployeeAction(fullName, action);
+        return;
+    }
+
+    window.speechSynthesis.speak(message);
+}
 
 function saveLogItem(d) {
     let log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
@@ -237,8 +261,8 @@ function saveLogItem(d) {
         name = text;
     }
 
-    // 🧠 Use only the name for the greeting
-    const spokenName = name && !/^\d+$/.test(name) ? name : "";
+    // Determine action for voice greeting
+    let action = existing ? "logged out" : "logged in";
 
     if (!existing) {
         const entry = {
@@ -250,14 +274,14 @@ function saveLogItem(d) {
         };
         log.unshift(entry);
 
-        // 🗣️ Speak name only (fallback: generic)
-        speakEmployeeAction(spokenName || "employee", "logged in");
+        // 🗣️ Speak nickname only (fallback: generic)
+        speakEmployeeAction(name || "employee", action);
     } else {
         existing.logOut = now;
         existing.snapshot = d.snapshot;
         existing.timestamp = Date.now();
 
-        speakEmployeeAction(spokenName || "employee", "logged out");
+        speakEmployeeAction(name || "employee", action);
     }
 
     log.sort((a, b) => b.timestamp - a.timestamp);
@@ -265,9 +289,6 @@ function saveLogItem(d) {
 
     renderLog();
 }
-
-
-
 
 function renderLog() {
     const log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
