@@ -97,130 +97,35 @@ function handleResult(t, type) {
     if (!t) return;
     const now = new Date();
 
-    // Avoid rapid duplicate scans (within 2.5 seconds)
     if (lastSeen && lastSeen.text === t && (now - lastSeen.time) < 2500) return;
     lastSeen = { text: t, time: now };
     lastResult.textContent = t;
     status.textContent = 'Detected';
 
-    // 📸 Capture a fresh snapshot every scan
     const snapshotCanvas = document.createElement('canvas');
     snapshotCanvas.width = video.videoWidth;
     snapshotCanvas.height = video.videoHeight;
     const snapCtx = snapshotCanvas.getContext('2d');
     snapCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-    const snapshotData = snapshotCanvas.toDataURL('image/jpeg', 0.9); // better quality
+    const snapshotData = snapshotCanvas.toDataURL('image/jpeg', 0.9);
 
-    // Save scan result with the latest snapshot
     saveLogItem({
         text: t,
         type: type,
         snapshot: snapshotData
     });
 
-    // Play beep sound
     if (soundToggle.checked) {
         try { beep.currentTime = 0; beep.play(); } catch { }
     }
 
-    // Auto-copy detected text
     if (autoCopy.checked && navigator.clipboard) {
         navigator.clipboard.writeText(t);
     }
 
-    // Auto-open links
     if (autoOpen.checked && /^https?:\/\//i.test(t)) {
         window.open(t, '_blank');
     }
-}
-
-// Function to extract nickname from full name
-function extractNickname(fullName) {
-    if (!fullName) return "employee";
-    
-    // Remove extra spaces and convert to uppercase for consistent processing
-    const cleanName = fullName.trim().toUpperCase();
-    
-    // Common patterns for extracting first name/nickname
-    // Case 1: "OCINO, RECHELLE" -> extract "RECHELLE"
-    if (cleanName.includes(',')) {
-        const parts = cleanName.split(',');
-        if (parts.length > 1) {
-            return parts[1].trim().split(' ')[0]; // Take first word after comma
-        }
-    }
-    
-    // Case 2: "RECHELLE OCINO" -> extract "RECHELLE"
-    if (cleanName.includes(' ')) {
-        return cleanName.split(' ')[0]; // Take first word
-    }
-    
-    // Case 3: Single word name
-    return cleanName;
-}
-
-// 🗣️ Speak employee nickname with a friendly female voice
-function speakEmployeeAction(fullName, action = "logged in") {
-    if (!('speechSynthesis' in window)) {
-        console.warn("Speech synthesis not supported in this browser.");
-        return;
-    }
-
-    // Extract nickname from full name
-    const nickname = extractNickname(fullName);
-    
-    // 🎀 Random greetings (friendly tone) using only nickname
-    const greetingsIn = [
-        `Hello young stunna ${nickname}!`,
-        `Good day ${nickname}!`,
-        `Nice to see you, ${nickname}!`,
-        `Hello ${nickname}, great to have you back!`,
-        `Hi ${nickname}, let's make today amazing!`
-    ];
-
-    const greetingsOut = [
-        `Goodbye ${nickname}!`,
-        `Take care ${nickname}!`,
-        `Great job today, ${nickname}!`,
-        `Have a nice day, ${nickname}!`,
-        `See you tomorrow, ${nickname}!`
-    ];
-
-    // Choose random message depending on login/logout
-    const messageText = action === "logged out"
-        ? greetingsOut[Math.floor(Math.random() * greetingsOut.length)]
-        : greetingsIn[Math.floor(Math.random() * greetingsIn.length)];
-
-    const message = new SpeechSynthesisUtterance(messageText);
-    message.lang = "en-US";
-    message.pitch = 1.2;     // Slightly higher for a feminine tone
-    message.rate = 1;        // Normal speed
-    message.volume = 1;
-
-    // 🎧 Pick a female voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const femaleVoice = voices.find(v =>
-        v.name.toLowerCase().includes("female") ||
-        v.name.toLowerCase().includes("woman") ||
-        v.name.toLowerCase().includes("samantha") || // macOS
-        v.name.toLowerCase().includes("zira") ||     // Windows
-        (v.lang === "en-US" && v.name.toLowerCase().includes("google"))
-    );
-
-    if (femaleVoice) {
-        message.voice = femaleVoice;
-    } else if (voices.length > 0) {
-        // fallback to first available voice
-        message.voice = voices[0];
-    }
-
-    // Some browsers need voices loaded first
-    if (voices.length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => speakEmployeeAction(fullName, action);
-        return;
-    }
-
-    window.speechSynthesis.speak(message);
 }
 
 function saveLogItem(d) {
@@ -234,35 +139,26 @@ function saveLogItem(d) {
     let eid = "";
     let name = "";
 
-    // 🔍 Smart extraction
-    // Case 1: "202500343 - OCINO, RECHELLE"
     if (text.match(/^\d+\s*[-:]\s*[A-Za-z]/)) {
         const parts = text.split(/[-:]/);
         eid = parts[0].trim();
         name = parts[1] ? parts[1].trim() : "";
     }
-    // Case 2: "OCINO, RECHELLE - 202500343"
     else if (text.match(/[A-Za-z].*[-:]\s*\d+$/)) {
         const parts = text.split(/[-:]/);
         name = parts[0].trim();
         eid = parts[1] ? parts[1].trim() : "";
     }
-    // Case 3: "OCINO, RECHELLE"
     else if (/[A-Za-z]/.test(text) && !/\d{6,}/.test(text)) {
         name = text;
     }
-    // Case 4: "202500343" (numbers only)
     else if (/^\d+$/.test(text)) {
         eid = text;
-        name = ""; // no name found
+        name = "";
     }
-    // Case 5: fallback
     else {
         name = text;
     }
-
-    // Determine action for voice greeting
-    let action = existing ? "logged out" : "logged in";
 
     if (!existing) {
         const entry = {
@@ -273,15 +169,10 @@ function saveLogItem(d) {
             timestamp: Date.now()
         };
         log.unshift(entry);
-
-        // 🗣️ Speak nickname only (fallback: generic)
-        speakEmployeeAction(name || "employee", action);
     } else {
         existing.logOut = now;
         existing.snapshot = d.snapshot;
         existing.timestamp = Date.now();
-
-        speakEmployeeAction(name || "employee", action);
     }
 
     log.sort((a, b) => b.timestamp - a.timestamp);
