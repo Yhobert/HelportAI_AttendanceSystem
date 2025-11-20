@@ -18,6 +18,14 @@ const startBtn=document.getElementById('startBtn'),
 let stream=null, rafId=null, barcodeDetector=null, fallbackJsQR=null, scanning=false;
 const LOG_KEY='qr-scanner-log-v3';
 
+// YOUR AUDIO FILES - will play automatically on scan
+const firstTapAudio = new Audio('ingat.mp3'); // First tap audio file
+const secondTapAudio = new Audio('loginSucc.mp3'); // Second tap audio file
+
+// Optional: Preload audio files
+firstTapAudio.preload = 'auto';
+secondTapAudio.preload = 'auto';
+
 async function initBarcodeDetector(){
     if('BarcodeDetector' in window){
         const f = await window.BarcodeDetector.getSupportedFormats().catch(()=>[]);
@@ -115,9 +123,8 @@ function handleResult(t, type) {
         snapshot: snapshotData
     });
 
-    if (soundToggle.checked) {
-        try { beep.currentTime = 0; beep.play(); } catch { }
-    }
+    // ALWAYS play appropriate audio based on whether it's first or second tap
+    playTapAudio(t);
 
     if (autoCopy.checked && navigator.clipboard) {
         navigator.clipboard.writeText(t);
@@ -125,6 +132,28 @@ function handleResult(t, type) {
 
     if (autoOpen.checked && /^https?:\/\//i.test(t)) {
         window.open(t, '_blank');
+    }
+}
+
+function playTapAudio(text) {
+    const log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    const today = new Date().toLocaleDateString();
+    
+    // Check if this is first tap (log in) or second tap (log out)
+    const existingEntry = log.find(e => e.text === text && e.date === today);
+    
+    try {
+        if (existingEntry && existingEntry.logIn && !existingEntry.logOut) {
+            // Second tap (log out) - play second tap audio
+            secondTapAudio.currentTime = 0;
+            secondTapAudio.play().catch(e => console.log('Second tap audio play failed:', e));
+        } else {
+            // First tap (log in) - play first tap audio
+            firstTapAudio.currentTime = 0;
+            firstTapAudio.play().catch(e => console.log('First tap audio play failed:', e));
+        }
+    } catch (e) {
+        console.log('Audio error:', e);
     }
 }
 
