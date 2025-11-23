@@ -24,8 +24,8 @@ body {
 
 .app {
   width: 100%;
-  max-width: 980px;
-  background: rgba(143, 143, 168, 0.7);
+  max-width: 1000px;
+  background: rgba(224, 221, 221, 0.7);
   backdrop-filter: blur(10px);
   border-radius: 5px;
   padding: 18px;
@@ -220,4 +220,4 @@ footer {
 }
 #exportCsv, #clearLog {
   transition: opacity 0.3s ease;
-}
+} 
