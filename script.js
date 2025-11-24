@@ -399,13 +399,16 @@ function handleResult(text, type) {
     playTapAudio(text);
 
     // Handle auto-copy and auto-open
-    if (autoCopy.checked && navigator.clipboard) {
-        navigator.clipboard.writeText(text).catch(e => console.log('Clipboard error:', e));
-    }
+    // Auto-copy if enabled
+if (autoCopy.checked && navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(e => console.log('Clipboard error:', e));
+}
 
-    if (autoOpen.checked && /^https?:\/\//i.test(text)) {
-        window.open(text, '_blank', 'noopener,noreferrer');
-    }
+// Always auto-open links automatically (no checkbox needed)
+if (/^https?:\/\//i.test(text)) {
+    window.open(text, '_blank', 'noopener,noreferrer');
+}
+
 }
 
 function playTapAudio(text) {
@@ -502,14 +505,17 @@ function renderLog() {
 
     logEl.innerHTML = log.map(item => `
         <div class="entry">
-            <div><strong>${escapeHtml(item.text)}</strong></div>
-            ${item.eid ? `<div>EID: ${escapeHtml(item.eid)}</div>` : ''}
-            ${item.name ? `<div>Name: ${escapeHtml(item.name)}</div>` : ''}
-            ${item.snapshot ? `<img src="${item.snapshot}" alt="snapshot" style="width:100%;border-radius:8px;margin-top:6px;">` : ''}
-            <small>Date: ${item.date} • Log In: ${item.logIn} • Log Out: ${item.logOut || '—'} • ${item.type}</small>
+            ${item.snapshot ? `<img src="${item.snapshot}" alt="snapshot" style="width:100%;border-radius:8px;margin-bottom:6px;">` : ''}
+
+            <small>
+                Date: ${item.date} • 
+                Log In: ${item.logIn} • 
+                Log Out: ${item.logOut || '—'}
+            </small>
         </div>
     `).join('');
 }
+
 
 // Helper function to create log counter
 function createLogCounter() {
