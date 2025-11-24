@@ -1,7 +1,7 @@
 :root {
   --bg: #0f1724;
   --card: #0b1220;
-  --muted: #9aa4b2;
+  --muted: #302727;
   --accent: #06b6d4;
 }
 
@@ -24,7 +24,7 @@ body {
 
 .app {
   width: 100%;
-  max-width: 1000px;
+  max-width: 1500px;
   background: rgba(224, 221, 221, 0.7);
   backdrop-filter: blur(10px);
   border-radius: 5px;
@@ -77,17 +77,17 @@ button:hover {
 }
 
 .card {
-  background: rgba(205, 8, 8, 0.05);
+  background: rgba(255, 20, 20, 0.05);
   padding: 12px;
-  border-radius: 10px;
-  min-height: 320px;
+  border-radius: 12px;
+  min-height: 200px;
 }
 
 #video {
   width: 100%;
   height: 100%;
   border-radius: 8px;
-  background: #000;
+  background: #010101;
   object-fit: cover;
 }
 
@@ -160,7 +160,7 @@ footer {
     grid-template-columns: 1fr;
   }
   .card {
-    min-height: 260px;
+    min-height: 100px;
   }
 }
 /* 🔒 Auth Modal Styles */
@@ -207,7 +207,7 @@ footer {
 .auth-box p {
   margin-top: 12px;
   font-size: 14px;
-  color: #9aa4b2;
+  color: #005ee2;
 }
 
 .auth-box a {
