@@ -22,7 +22,6 @@ function hash(str) {
   return btoa(str);
 }
 
-// === Role Dropdown for Signup ===
 const roleSelect = document.createElement("select");
 roleSelect.id = "roleSelect";
 roleSelect.innerHTML = `
@@ -38,7 +37,6 @@ roleSelect.style.color = "white";
 roleSelect.style.border = "1px solid rgba(255,255,255,0.1)";
 authModal.querySelector(".auth-box").insertBefore(roleSelect, authAction);
 
-// === Switch Login / Signup Mode ===
 switchMode.addEventListener("click", e => {
   e.preventDefault();
   if (mode === "login") {
@@ -57,7 +55,6 @@ switchMode.addEventListener("click", e => {
   document.getElementById("switchMode").addEventListener("click", switchMode.click);
 });
 
-// === Handle Login/Signup ===
 authAction.addEventListener("click", () => {
   const username = usernameInput.value.trim();
   const password = passwordInput.value.trim();
@@ -96,7 +93,6 @@ authAction.addEventListener("click", () => {
   }
 });
 
-// === Auto-login if session exists ===
 window.addEventListener("load", () => {
   const session = localStorage.getItem(SESSION_KEY);
   if (session) {
@@ -108,21 +104,19 @@ window.addEventListener("load", () => {
   }
 });
 
-// === Apply role-based UI ===
 function applyRoleUI(role) {
   const exportBtn = document.getElementById("exportCsv");
   const clearBtn = document.getElementById("clearLog");
-  if (role === "admin") {
-    exportBtn.style.display = "inline-block";
-    clearBtn.style.display = "inline-block";
-  } else {
-    exportBtn.style.display = "none";
-    clearBtn.style.display = "none";
+
+  if (exportBtn) {
+    exportBtn.style.display = role === "admin" ? "inline-block" : "none";
+  }
+  if (clearBtn) {
+    clearBtn.style.display = role === "admin" ? "inline-block" : "none";
   }
   showUserInfo(role);
 }
 
-// === Show username & logout ===
 function showUserInfo(role) {
   const header = document.querySelector("header");
   let info = document.getElementById("userInfo");
