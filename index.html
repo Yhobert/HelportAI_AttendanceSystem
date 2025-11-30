@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>HelportAI Attendance System</title>
 
-  <!-- 🔗 External CSS -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,7 +27,9 @@
         <option value="user">Front</option>
       </select>
       <button id="clearLog">Clear log</button>
-      <button id="exportCsv">Export CSV</button>
+      <a href="attendance-log.html" class="primary" style="text-decoration: none; display: inline-flex; align-items: center; padding: 8px 10px;">
+        View Attendance Log
+      </a>
     </div>
 
     <div class="layout" style="margin-top:12px">
@@ -53,7 +54,7 @@
 
       <aside class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <strong>Scan log</strong>
+          <strong>Recent Scans</strong>
           <small class="muted">Stored in localStorage</small>
         </div>
         <div id="log" class="log"></div>
@@ -67,25 +68,18 @@
 
   <audio id="beep" src="beep.mp3" preload="auto"></audio>
 
-  <!-- 🔗 External JavaScript -->
   <script src="script.js"></script>
-  <!-- 🔒 Password Modal -->
+
+  <div id="authModal" class="auth-modal">
+    <div class="auth-box">
+      <h2 id="authTitle">Login</h2>
+      <input id="username" placeholder="Username" autocomplete="off" />
+      <input id="password" placeholder="Password" type="password" />
+      <button id="authAction" class="primary">Login</button>
+      <p id="toggleAuth">No account? <a href="#" id="switchMode">Sign up</a></p>
+    </div>
   </div>
-</div>
-<!-- 🔒 Login / Signup Modal -->
-<div id="authModal" class="auth-modal">
-  <div class="auth-box">
-    <h2 id="authTitle">Login</h2>
-    <input id="username" placeholder="Username" autocomplete="off" />
-    <input id="password" placeholder="Password" type="password" />
-    <button id="authAction" class="primary">Login</button>
-    <p id="toggleAuth">No account? <a href="#" id="switchMode">Sign up</a></p>
-  </div>
-</div>
 
-<script src="auth.js"></script>
-
-
+  <script src="auth.js"></script>
 </body>
 </html>
-
