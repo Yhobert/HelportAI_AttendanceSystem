@@ -5,132 +5,204 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>HelportAI - Attendance Log</title>
   <link rel="stylesheet" href="style.css">
+
+  <!-- 🔥 Enhanced CSS -->
   <style>
+    :root {
+      --bg: #0f1724;
+      --card: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.12);
+      --highlight: rgba(6, 182, 212, 0.25);
+      --accent: #06b6d4;
+      --text: #e5e7eb;
+    }
+
+    body {
+      background: var(--bg);
+    }
+
+    /* Page container */
     .attendance-container {
       max-width: 1200px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 25px;
     }
-    
+
+    /* Header */
     .attendance-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       padding-bottom: 10px;
-      border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+      border-bottom: 2px solid var(--border);
     }
-    
-    .attendance-table {
-      width: 100%;
-      border-collapse: collapse;
-      background: rgba(255,255,255,0.05);
-      border-radius: 8px;
-      overflow: hidden;
+
+    .attendance-header h1 {
+      color: white;
+      font-size: 28px;
+      letter-spacing: 1px;
     }
-    
-    .attendance-table th {
-      background: rgba(6, 182, 212, 0.3);
-      padding: 15px;
-      text-align: left;
-      font-weight: 600;
-      border-bottom: 2px solid rgba(255,255,255,0.1);
-    }
-    
-    .attendance-table td {
-      padding: 15px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-    
-    .attendance-table tr:hover {
-      background: rgba(255,255,255,0.02);
-    }
-    
-    .name-column {
-      width: 40%;
-    }
-    
-    .eid-column {
-      width: 15%;
-    }
-    
-    .time-column {
-      width: 15%;
-    }
-    
-    .hours-column {
-      width: 15%;
-      text-align: right;
-    }
-    
+
+    /* Back Button */
     .back-button {
       background: var(--accent);
       color: white;
-      padding: 10px 20px;
-      border-radius: 8px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-weight: 600;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      transition: all 0.3s ease;
+      transition: 0.25s ease;
+      box-shadow: 0px 4px 10px rgba(6, 182, 212, 0.35);
     }
-    
+
     .back-button:hover {
       background: #0891b2;
       transform: translateY(-2px);
+      box-shadow: 0px 6px 16px rgba(6, 182, 212, 0.55);
     }
-    
-    .total-hours {
+
+    /* Action Buttons Bar */
+    .table-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 15px;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      padding: 12px 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+    }
+
+    /* Buttons */
+    .action-button {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: 0.25s ease;
+      backdrop-filter: blur(6px);
+    }
+
+    .action-button:hover {
+      background: rgba(255,255,255,0.15);
+      transform: translateY(-2px);
+    }
+
+    /* Scroll Container for Table */
+    #attendanceTableContainer {
+      max-height: 550px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0px 6px 20px rgba(0,0,0,0.35);
+      backdrop-filter: blur(10px);
+    }
+
+    /* Table */
+    .attendance-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: rgba(255,255,255,0.03);
+    }
+
+    /* Sticky header */
+    .attendance-table thead th {
+      position: sticky;
+      top: 60px;
+      z-index: 10;
+      background: var(--highlight);
+      backdrop-filter: blur(8px);
+    }
+
+    .attendance-table th {
+      padding: 16px;
+      text-align: left;
+      font-weight: 700;
+      color: white;
+      border-bottom: 2px solid var(--border);
+      letter-spacing: 0.5px;
+    }
+
+    .attendance-table td {
+      padding: 15px;
+      color: #cbd5e1;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      transition: 0.3s ease;
+      font-size: 14px;
+    }
+
+    .attendance-table tr:hover td {
+      background: rgba(255,255,255,0.06);
+      transform: scale(1.01);
+    }
+
+    /* Date row */
+    .attendance-table tr.date-row td {
+      background: rgba(6,182,212,0.12);
       font-weight: bold;
-      color: #ffffff;
+      color: white;
+      text-align: center;
+      letter-spacing: 1px;
     }
-    
+
+    /* Column widths */
+    .name-column { width: 40%; }
+    .eid-column { width: 15%; }
+    .time-column { width: 15%; }
+    .hours-column { width: 15%; text-align: right; }
+
+    .total-hours {
+      color: #00eaff;
+      font-weight: 700;
+    }
+
+    /* No data message */
     .no-data {
       text-align: center;
       padding: 40px;
-      color: var(--muted);
+      color: #9ca3af;
+      font-size: 16px;
+      letter-spacing: 0.5px;
     }
-    
-    .table-actions {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-    
-    .action-button {
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.2);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-    
-    .action-button:hover {
-      background: rgba(255,255,255,0.2);
+
+    .file-column {
+      text-align: center !important;
     }
   </style>
+
 </head>
+
 <body>
   <div class="app">
     <div class="attendance-container">
+
       <div class="attendance-header">
         <h1>Attendance Log</h1>
-        <a href="index.html" class="back-button">
-          ← Back to Scanner
-        </a>
+        <a href="index.html" class="back-button">← Back to Scanner</a>
       </div>
 
+      <!-- Sticky top buttons -->
       <div class="table-actions">
         <button id="refreshBtn" class="action-button">Refresh</button>
         <button id="exportBtn" class="action-button">Export CSV</button>
         <button id="clearBtn" class="action-button">Clear All</button>
       </div>
 
+      <!-- Scrollable table container -->
       <div id="attendanceTableContainer">
-        <!-- Table will be generated by JavaScript -->
+        <!-- Table injected by JS -->
       </div>
+
     </div>
   </div>
 
