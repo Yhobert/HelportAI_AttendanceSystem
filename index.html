@@ -12,6 +12,14 @@
     <header>
       <h1>HelportAI Attendance System</h1>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <!-- Admin Login/Logout Button -->
+        <button id="adminToggle" class="admin-btn" style="font-size: 12px; padding: 6px 10px;">
+          Admin Login
+        </button>
+        <!-- View Attendance Log button (hidden by default) -->
+        <a id="viewLogBtn" href="attendance-log.html" class="primary" style="text-decoration: none; display: inline-flex; align-items: center; padding: 6px 10px; display: none;">
+          View Log
+        </a>
       </div>
     </header>
 
@@ -26,10 +34,19 @@
         <option value="environment">Rear (preferred)</option>
         <option value="user">Front</option>
       </select>
-      <button id="clearLog">Clear log</button>
-      <a href="attendance-log.html" class="primary" style="text-decoration: none; display: inline-flex; align-items: center; padding: 8px 10px;">
-        View Attendance Log
-      </a>
+      
+      <!-- Mode selection -->
+      <div class="mode-selector" style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 12px; color: #aaa;">Mode:</span>
+        <select id="logTypeSelect" class="select">
+          <option value="auto">Auto (default)</option>
+          <option value="login">Log In</option>
+          <option value="logout">Log Out</option>
+        </select>
+      </div>
+      
+      <!-- Clear Log button (hidden by default) -->
+      <button id="clearLog" style="display: none;">Clear log</button>
     </div>
 
     <div class="layout" style="margin-top:12px">
@@ -45,9 +62,12 @@
             <div class="flex"><small id="status">Idle</small></div>
           </div>
 
-          <div style="display:flex;gap:10px;margin-top:8px;align-items:center">
-            <label class="flex"><input id="soundToggle" type="checkbox"> Beep on scan</label>
-            <label class="flex"><input id="autoCopy" type="checkbox"> Auto-copy</label>
+          <!-- Current Mode Display in Lower Left -->
+          <div id="currentModeDisplay" class="current-mode-display">
+            <div class="mode-display-content">
+              <span style="color: #aaa; font-size: 11px;">MODE:</span>
+              <span id="modeText" class="mode-text">AUTO</span>
+            </div>
           </div>
         </div>
       </section>
@@ -58,6 +78,17 @@
           <small class="muted">Stored in localStorage</small>
         </div>
         <div id="log" class="log"></div>
+        
+        <!-- Manual Time In/Out buttons -->
+        <div class="manual-buttons-container" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+          <div style="text-align: center; margin-bottom: 8px;">
+            <small style="color: #aaa;">Manual Entry</small>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button id="manualTimeInBtn" class="manual-btn" style="flex: 1; background-color: #4CAF50; padding: 10px;">Manual Time In</button>
+            <button id="manualTimeOutBtn" class="manual-btn" style="flex: 1; background-color: #f44336; padding: 10px;">Manual Time Out</button>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -68,18 +99,21 @@
 
   <audio id="beep" src="beep.mp3" preload="auto"></audio>
 
-  <script src="script.js"></script>
-
-  <div id="authModal" class="auth-modal">
-    <div class="auth-box">
-      <h2 id="authTitle">Login</h2>
-      <input id="username" placeholder="Username" autocomplete="off" />
-      <input id="password" placeholder="Password" type="password" />
-      <button id="authAction" class="primary">Login</button>
-      <p id="toggleAuth">No account? <a href="#" id="switchMode">Sign up</a></p>
+  <!-- Admin Login Modal -->
+  <div id="adminLoginModal" class="admin-modal">
+    <div class="admin-modal-content">
+      <h3>Admin Login</h3>
+      <input type="text" id="adminUsername" placeholder="Username" autocomplete="off" />
+      <input type="password" id="adminPassword" placeholder="Password" />
+      <div class="admin-modal-actions">
+        <button id="adminLoginCancel" style="background: #666;">Cancel</button>
+        <button id="adminLoginSubmit" class="primary">Login</button>
+      </div>
     </div>
   </div>
 
-  <script src="auth.js"></script>
+  <!-- Manual Entry Modal (already in your script.js, but HTML created by JS) -->
+  
+  <script src="script.js"></script>
 </body>
 </html>
