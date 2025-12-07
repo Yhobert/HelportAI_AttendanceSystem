@@ -29,6 +29,7 @@ function initDB() {
                 store.createIndex('timestamp', 'timestamp', { unique: false });
                 store.createIndex('date', 'date', { unique: false });
                 store.createIndex('filename', 'filename', { unique: false });
+                store.createIndex('logIn', 'logIn', { unique: false });
             }
         };
     });
@@ -40,8 +41,9 @@ async function getAllRecords() {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
         const store = transaction.objectStore(STORE_NAME);
+        // Use timestamp index to get records in chronological order
         const index = store.index('timestamp');
-        const request = index.openCursor(null, 'prev');
+        const request = index.openCursor(null, 'next'); // Change from 'prev' to 'next' for chronological order
         const results = [];
         
         request.onsuccess = (event) => {
@@ -92,41 +94,90 @@ async function loadAttendanceData() {
     const filesSaved = log.filter(record => record.filename && record.filename !== 'null').length;
     storageInfo.textContent = `Database: ${log.length} records | Files saved to disk: ${filesSaved}`;
 
-    // Group by date and then by person
+    // Group by date and then create entries in chronological order
     const groupedData = {};
     
-    log.forEach(entry => {
+    // First, sort all records by timestamp (chronological order)
+    const sortedLog = log.sort((a, b) => {
+        // Use the timestamp for sorting if available
+        if (a.timestamp && b.timestamp) {
+            return new Date(a.timestamp) - new Date(b.timestamp);
+        }
+        // Fallback to date and time comparison
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        
+        // If same date, compare times
+        return compareTimeStrings(a.logIn || a.logOut, b.logIn || b.logOut);
+    });
+
+    // Process records in chronological order
+    sortedLog.forEach(entry => {
         if (!groupedData[entry.date]) {
-            groupedData[entry.date] = {};
+            groupedData[entry.date] = [];
         }
         
-        const key = `${entry.eid}-${entry.name}`;
-        if (!groupedData[entry.date][key]) {
-            groupedData[entry.date][key] = {
+        // Find if this person already has an entry for this date
+        const existingEntryIndex = groupedData[entry.date].findIndex(
+            e => e.eid === entry.eid && e.name === entry.name
+        );
+        
+        if (existingEntryIndex === -1) {
+            // New entry
+            groupedData[entry.date].push({
                 name: entry.name,
                 eid: entry.eid,
                 logIn: entry.logIn,
                 logOut: entry.logOut || '',
                 date: entry.date,
                 filename: entry.filename,
-                totalHours: '—' // Initialize total hours
-            };
+                timestamp: entry.timestamp,
+                totalHours: '—'
+            });
         } else {
-            // Update with latest log out time
+            // Update existing entry
+            const existingEntry = groupedData[entry.date][existingEntryIndex];
+            
+            // If this is a login and we don't have one yet, set it
+            if (entry.logIn && !existingEntry.logIn) {
+                existingEntry.logIn = entry.logIn;
+                existingEntry.timestamp = entry.timestamp;
+            }
+            
+            // If this is a logout, update it (should be chronologically later than login)
             if (entry.logOut) {
-                groupedData[entry.date][key].logOut = entry.logOut;
-                groupedData[entry.date][key].filename = entry.filename;
+                existingEntry.logOut = entry.logOut;
+                existingEntry.filename = entry.filename;
+            }
+            
+            // Update timestamp if this record is newer
+            if (entry.timestamp && existingEntry.timestamp) {
+                if (new Date(entry.timestamp) > new Date(existingEntry.timestamp)) {
+                    existingEntry.timestamp = entry.timestamp;
+                }
             }
         }
     });
 
     // Calculate total hours for each entry
     Object.keys(groupedData).forEach(date => {
-        Object.keys(groupedData[date]).forEach(key => {
-            const entry = groupedData[date][key];
+        groupedData[date].forEach(entry => {
             if (entry.logIn && entry.logOut) {
                 entry.totalHours = calculateTotalHours(entry.logIn, entry.logOut);
             }
+        });
+        
+        // Sort entries within each date by time (chronologically)
+        groupedData[date].sort((a, b) => {
+            // Compare by login time first
+            if (a.logIn && b.logIn) {
+                return compareTimeStrings(a.logIn, b.logIn);
+            }
+            // If no login time, compare by timestamp
+            if (a.timestamp && b.timestamp) {
+                return new Date(a.timestamp) - new Date(b.timestamp);
+            }
+            return 0;
         });
     });
 
@@ -135,6 +186,7 @@ async function loadAttendanceData() {
         <table class="attendance-table">
             <thead>
                 <tr>
+                    <th class="time-column">Time</th>
                     <th class="name-column">Name</th>
                     <th class="eid-column">EID</th>
                     <th class="time-column">Log In</th>
@@ -146,29 +198,29 @@ async function loadAttendanceData() {
             <tbody>
     `;
 
-    // Sort dates in descending order
+    // Sort dates in descending order (most recent first)
     const sortedDates = Object.keys(groupedData).sort((a, b) => new Date(b) - new Date(a));
     
     sortedDates.forEach(date => {
         // Add date header
         tableHTML += `
             <tr style="background: rgba(6, 182, 212, 0.1);">
-                <td colspan="6" style="font-weight: bold; text-align: center;">
+                <td colspan="7" style="font-weight: bold; text-align: center;">
                     📅 ${date}
                 </td>
             </tr>
         `;
         
-        const dayEntries = Object.values(groupedData[date]);
-        
-        // Sort by name
-        dayEntries.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        const dayEntries = groupedData[date];
         
         dayEntries.forEach(entry => {
             const hasFile = entry.filename && entry.filename !== 'null';
+            // Determine if this is login or logout event for time display
+            const eventTime = entry.logIn || entry.logOut || '—';
             
             tableHTML += `
                 <tr>
+                    <td class="time-column">${eventTime}</td>
                     <td class="name-column">${escapeHtml(entry.name || '—')}</td>
                     <td class="eid-column">${escapeHtml(entry.eid || '—')}</td>
                     <td class="time-column">${entry.logIn || '—'}</td>
@@ -190,6 +242,23 @@ async function loadAttendanceData() {
     `;
 
     attendanceTableContainer.innerHTML = tableHTML;
+}
+
+// Helper function to compare time strings
+function compareTimeStrings(timeA, timeB) {
+    if (!timeA || !timeB) return 0;
+    
+    const parseTime = (timeStr) => {
+        const [time, period] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+        
+        if (period === 'PM' && hours < 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+        
+        return hours * 60 + minutes;
+    };
+    
+    return parseTime(timeA) - parseTime(timeB);
 }
 
 function createStorageInfo() {
@@ -266,63 +335,41 @@ async function exportToCSV() {
         return;
     }
     
-    // Group data similarly to the table
-    const groupedData = {};
-    
-    log.forEach(entry => {
-        if (!groupedData[entry.date]) {
-            groupedData[entry.date] = {};
+    // Sort data chronologically
+    const sortedLog = log.sort((a, b) => {
+        if (a.timestamp && b.timestamp) {
+            return new Date(a.timestamp) - new Date(b.timestamp);
         }
-        
-        const key = `${entry.eid}-${entry.name}`;
-        if (!groupedData[entry.date][key]) {
-            groupedData[entry.date][key] = {
-                name: entry.name,
-                eid: entry.eid,
-                logIn: entry.logIn,
-                logOut: entry.logOut || '',
-                date: entry.date,
-                filename: entry.filename
-            };
-        } else {
-            if (entry.logOut) {
-                groupedData[entry.date][key].logOut = entry.logOut;
-                groupedData[entry.date][key].filename = entry.filename;
-            }
-        }
-    });
-    
-    // Calculate total hours for export
-    Object.keys(groupedData).forEach(date => {
-        Object.keys(groupedData[date]).forEach(key => {
-            const entry = groupedData[date][key];
-            if (entry.logIn && entry.logOut) {
-                entry.totalHours = calculateTotalHours(entry.logIn, entry.logOut);
-            } else {
-                entry.totalHours = '';
-            }
-        });
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return compareTimeStrings(a.logIn || a.logOut, b.logIn || b.logOut);
     });
     
     // CSV headers
-    const csvRows = ['Date,Name,EID,Log In,Log Out,Total Hours,File Saved'];
+    const csvRows = ['Timestamp,Date,Time,Name,EID,Log In,Log Out,Total Hours,File Saved'];
     
-    Object.keys(groupedData).sort((a, b) => new Date(b) - new Date(a)).forEach(date => {
-        Object.values(groupedData[date]).forEach(entry => {
-            const fileStatus = entry.filename && entry.filename !== 'null' ? 'Yes' : 'No';
-            
-            const row = [
-                `"${entry.date}"`,
-                `"${(entry.name || '').replace(/"/g, '""')}"`,
-                `"${(entry.eid || '').replace(/"/g, '""')}"`,
-                `"${entry.logIn}"`,
-                `"${entry.logOut}"`,
-                `"${entry.totalHours || ''}"`,
-                `"${fileStatus}"`
-            ].join(',');
-            
-            csvRows.push(row);
-        });
+    sortedLog.forEach(entry => {
+        const eventTime = entry.logIn || entry.logOut || '';
+        const fileStatus = entry.filename && entry.filename !== 'null' ? 'Yes' : 'No';
+        let totalHours = '';
+        
+        if (entry.logIn && entry.logOut) {
+            totalHours = calculateTotalHours(entry.logIn, entry.logOut);
+        }
+        
+        const row = [
+            `"${entry.timestamp || ''}"`,
+            `"${entry.date}"`,
+            `"${eventTime}"`,
+            `"${(entry.name || '').replace(/"/g, '""')}"`,
+            `"${(entry.eid || '').replace(/"/g, '""')}"`,
+            `"${entry.logIn || ''}"`,
+            `"${entry.logOut || ''}"`,
+            `"${totalHours}"`,
+            `"${fileStatus}"`
+        ].join(',');
+        
+        csvRows.push(row);
     });
     
     const csvContent = csvRows.join('\n');
