@@ -107,9 +107,28 @@ button:hover {
 }
 
 .log {
-  max-height: 420px;
+  max-height: 420px; /* Increased slightly to show more records */
   overflow: auto;
   margin-top: 8px;
+}
+
+/* Custom scrollbar for the log */
+.log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.log::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+
+.log::-webkit-scrollbar-thumb {
+  background: rgba(6, 182, 212, 0.5);
+  border-radius: 3px;
+}
+
+.log::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.7);
 }
 
 .entry {
@@ -163,64 +182,228 @@ footer {
     min-height: 100px;
   }
 }
-/* 🔒 Auth Modal Styles */
-.auth-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-  backdrop-filter: blur(6px);
-}
 
-.auth-box {
-  background: rgba(15, 23, 36, 0.9);
-  padding: 30px;
-  border-radius: 12px;
-  width: 300px;
-  text-align: center;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-}
-
-.auth-box h2 {
-  margin-top: 0;
-}
-
-.auth-box input {
-  display: block;
-  width: 100%;
-  margin: 10px 0;
-  padding: 10px;
+/* Current Mode Display Styles */
+.current-mode-display {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.7);
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.05);
+  padding: 8px 12px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.mode-display-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-text {
+  font-weight: bold;
+  font-size: 14px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+/* Mode colors */
+.mode-text.auto {
+  background: #666;
   color: white;
 }
 
-.auth-box button {
-  width: 100%;
-  margin-top: 8px;
+.mode-text.login {
+  background: #4CAF50;
+  color: white;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
 }
 
-.auth-box p {
-  margin-top: 12px;
-  font-size: 14px;
-  color: #005ee2;
+.mode-text.logout {
+  background: #f44336;
+  color: white;
+  box-shadow: 0 0 10px rgba(244, 67, 54, 0.3);
 }
 
-.auth-box a {
-  color: var(--accent);
+/* Mode selector in controls */
+.mode-selector {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: rgba(0,0,0,0.2);
+}
+
+/* Manual button styles */
+.manual-buttons-container {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+.manual-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  font-weight: bold;
+  border-radius: 8px;
   cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  font-size: 14px;
 }
 
-.hidden {
-  display: none !important;
+.manual-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  opacity: 0.9;
 }
-#exportCsv, #clearLog {
-  transition: opacity 0.3s ease;
-} 
+
+.manual-btn[style*="background-color: #4CAF50"] {
+  background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+}
+
+.manual-btn[style*="background-color: #f44336"] {
+  background: linear-gradient(135deg, #f44336 0%, #c62828 100%);
+}
+
+/* Manual modal styles */
+.manual-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.manual-modal-content {
+  background: rgba(15, 23, 36, 0.95);
+  padding: 24px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.manual-modal-content h3 {
+  margin-top: 0;
+  color: #06b6d4;
+  text-align: center;
+}
+
+.manual-modal-content input {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  font-size: 14px;
+}
+
+.manual-modal-content input:focus {
+  outline: none;
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+}
+
+.manual-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.manual-modal-actions button {
+  flex: 1;
+  padding: 10px;
+}
+
+/* Admin button styles */
+.admin-btn {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  border: none;
+  color: white;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.admin-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  opacity: 0.9;
+}
+
+/* Admin modal styles */
+.admin-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.admin-modal-content {
+  background: rgba(15, 23, 36, 0.95);
+  padding: 24px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 350px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.admin-modal-content h3 {
+  margin-top: 0;
+  color: #ff9800;
+  text-align: center;
+}
+
+.admin-modal-content input {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  font-size: 14px;
+}
+
+.admin-modal-content input:focus {
+  outline: none;
+  border-color: #ff9800;
+  box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2);
+}
+
+.admin-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.admin-modal-actions button {
+  flex: 1;
+  padding: 10px;
+}
+
 .entry strong {
     color: #000000;
     font-size: 14px;
@@ -230,4 +413,29 @@ footer {
     color: var(--muted);
     font-size: 12px;
     line-height: 1.4;
+}
+/* Add to your CSS file */
+#modeText {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    z-index: 1000;
+    font-size: 12px;
+}
+
+#modeText.auto {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+}
+
+#modeText.login {
+    background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+}
+
+#modeText.logout {
+    background: linear-gradient(135deg, #f44336 0%, #c62828 100%);
 }
