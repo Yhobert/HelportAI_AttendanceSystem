@@ -9,10 +9,25 @@ const startBtn=document.getElementById('startBtn'),
       fileInput=document.getElementById('fileInput'),
       facingSelect=document.getElementById('facingSelect'),
       beep=document.getElementById('beep'),
-      soundToggle=document.getElementById('soundToggle'),
-      autoCopy=document.getElementById('autoCopy'),
-      autoOpen=document.getElementById('autoOpen'),
-      clearLogBtn=document.getElementById('clearLog');
+      clearLogBtn=document.getElementById('clearLog'),
+      logTypeSelect=document.getElementById('logTypeSelect');
+
+// Admin system variables
+const adminToggle = document.getElementById('adminToggle');
+const adminLoginModal = document.getElementById('adminLoginModal');
+const adminUsername = document.getElementById('adminUsername');
+const adminPassword = document.getElementById('adminPassword');
+const adminLoginSubmit = document.getElementById('adminLoginSubmit');
+const adminLoginCancel = document.getElementById('adminLoginCancel');
+const viewLogBtn = document.getElementById('viewLogBtn');
+const manualTimeInBtn = document.getElementById('manualTimeInBtn');
+const manualTimeOutBtn = document.getElementById('manualTimeOutBtn');
+
+// Admin credentials (in production, use proper authentication)
+const ADMIN_CREDENTIALS = {
+  username: 'admin',
+  password: 'admin123' // Change this in production
+};
 
 let stream=null, rafId=null, barcodeDetector=null, fallbackJsQR=null, scanning=false;
 let snapshotDirectoryHandle = null;
@@ -35,15 +50,16 @@ const focusArea = {
     height: 0.5
 };
 
-// YOUR AUDIO FILES - will play automatically on scan
-const firstTapAudio = new Audio('ingat.mp3');
-const secondTapAudio = new Audio('loginSucc.mp3');
+// Audio files for login/logout
+const logoutAudio = new Audio('ingat.mp3');      // For logout (time out)
+const loginAudio = new Audio('loginSucc.mp3');   // For login (time in)
 
-// Optional: Preload audio files
-firstTapAudio.preload = 'auto';
-secondTapAudio.preload = 'auto';
+// Set audio properties
+logoutAudio.preload = 'auto';
+loginAudio.preload = 'auto';
+logoutAudio.volume = 1.0;
+loginAudio.volume = 1.0;
 
-// File System Access API - Request directory permission
 // File System Access API - Request directory permission
 async function requestDirectoryPermission() {
     try {
@@ -96,113 +112,6 @@ async function saveSnapshotToDisk(snapshotData, filename) {
         await writable.write(blob);
         
         // Close the file
-        await writable.close();
-        
-        console.log(`Snapshot saved as: ${filename}`);
-        return filename;
-    } catch (error) {
-        console.error('Error saving snapshot to disk:', error);
-        return null;
-    }
-}
-
-// Update the saveLogItem function to handle disk save failures gracefully
-// In the saveLogItem function, add this line to ensure total hours calculation:
-async function saveLogItem(data) {
-    const today = new Date().toLocaleDateString();
-    const now = new Date().toLocaleTimeString();
-    const timestamp = Date.now();
-
-    const text = (data.text || "").trim();
-    let eid = "";
-    let name = "";
-
-    // Parse EID and Name from QR text
-    if (text.match(/^\d+\s*[-:]\s*[A-Za-z]/)) {
-        const parts = text.split(/[-:]/);
-        eid = parts[0].trim();
-        name = parts[1] ? parts[1].trim() : "";
-    }
-    else if (text.match(/[A-Za-z].*[-:]\s*\d+$/)) {
-        const parts = text.split(/[-:]/);
-        name = parts[0].trim();
-        eid = parts[1] ? parts[1].trim() : "";
-    }
-    else if (/[A-Za-z]/.test(text) && !/\d{6,}/.test(text)) {
-        name = text;
-    }
-    else if (/^\d+$/.test(text)) {
-        eid = text;
-        name = "";
-    }
-    else {
-        name = text;
-    }
-
-    // Check for existing record for today
-    const existing = await getRecordByTextAndDate(text, today);
-
-    let savedFilename = null;
-    
-    // Try to save snapshot to disk if we have directory access
-    if (snapshotDirectoryHandle) {
-        const filename = generateSnapshotFilename(eid, name, timestamp, !!existing);
-        savedFilename = await saveSnapshotToDisk(data.snapshot, filename);
-    }
-
-    if (!existing) {
-        // First scan (log in)
-        const entry = {
-            text: data.text,
-            type: data.type,
-            eid: eid,
-            name: name,
-            date: today,
-            logIn: now,
-            logOut: '',
-            filename: savedFilename,
-            timestamp: timestamp
-        };
-        await addRecord(entry);
-    } else {
-
-        await updateRecord(existing.id, {
-            logOut: now,
-            filename: savedFilename,
-            timestamp: timestamp
-        });
-    }
-
-    renderLog();
-}
-
-async function checkDirectoryPermission() {
-    if (localStorage.getItem('hasDirectoryPermission') === 'true' && 'showDirectoryPicker' in window) {
-        try {
-            return true;
-        } catch (error) {
-            return false;
-        }
-    }
-    return false;
-}
-
-async function saveSnapshotToDisk(snapshotData, filename) {
-    if (!snapshotDirectoryHandle) {
-        console.log('No directory handle available. Snapshots will not be saved to disk.');
-        return null;
-    }
-
-    try {
-        const response = await fetch(snapshotData);
-        const blob = await response.blob();
-
-        const fileHandle = await snapshotDirectoryHandle.getFileHandle(filename, { create: true });
-
-        const writable = await fileHandle.createWritable();
-
-        await writable.write(blob);
-
         await writable.close();
         
         console.log(`Snapshot saved as: ${filename}`);
@@ -295,7 +204,7 @@ async function getRecords(limit = null) {
         
         request.onsuccess = (event) => {
             const cursor = event.target.result;
-            if (cursor && (!limit || results.length < limit)) {
+            if (cursor) {
                 results.push(cursor.value);
                 cursor.continue();
             } else {
@@ -685,35 +594,12 @@ async function handleResult(text, type) {
         snapshot: snapshotData
     });
 
-    playTapAudio(text);
-
-    if (autoCopy.checked && navigator.clipboard) {
-        navigator.clipboard.writeText(text).catch(e => console.log('Clipboard error:', e));
-    }
 
     if (/^https?:\/\//i.test(text)) {
         window.open(text, '_blank', 'noopener,noreferrer');
     }
 }
 
-async function playTapAudio(text) {
-    const today = new Date().toLocaleDateString();
-    const existingEntry = await getRecordByTextAndDate(text, today);
-    
-    try {
-        if (existingEntry && existingEntry.logIn && !existingEntry.logOut) {
-
-            secondTapAudio.currentTime = 0;
-            secondTapAudio.play().catch(e => console.log('Second tap audio play failed:', e));
-        } else {
-
-            firstTapAudio.currentTime = 0;
-            firstTapAudio.play().catch(e => console.log('First tap audio play failed:', e));
-        }
-    } catch (e) {
-        console.log('Audio error:', e);
-    }
-}
 
 async function saveLogItem(data) {
     const today = new Date().toLocaleDateString();
@@ -724,33 +610,38 @@ async function saveLogItem(data) {
     let eid = "";
     let name = "";
 
+    // Parse EID and Name
     if (text.match(/^\d+\s*[-:]\s*[A-Za-z]/)) {
         const parts = text.split(/[-:]/);
         eid = parts[0].trim();
         name = parts[1] ? parts[1].trim() : "";
-    }
-    else if (text.match(/[A-Za-z].*[-:]\s*\d+$/)) {
+    } else if (text.match(/[A-Za-z].*[-:]\s*\d+$/)) {
         const parts = text.split(/[-:]/);
         name = parts[0].trim();
         eid = parts[1] ? parts[1].trim() : "";
-    }
-    else if (/[A-Za-z]/.test(text) && !/\d{6,}/.test(text)) {
+    } else if (/[A-Za-z]/.test(text) && !/\d{6,}/.test(text)) {
         name = text;
-    }
-    else if (/^\d+$/.test(text)) {
+    } else if (/^\d+$/.test(text)) {
         eid = text;
         name = "";
-    }
-    else {
+    } else {
         name = text;
     }
 
+    // Determine log type
+    const userChoice = logTypeSelect.value; // auto / login / logout
     const existing = await getRecordByTextAndDate(text, today);
 
-    if (!existing) {
-        const filename = generateSnapshotFilename(eid, name, timestamp, false);
-        const savedFilename = await saveSnapshotToDisk(data.snapshot, filename);
-        
+    let isLogin = true; // default
+    if(userChoice === 'login') isLogin = true;
+    else if(userChoice === 'logout') isLogin = false;
+    else isLogin = !existing || !existing.logIn || (existing.logIn && existing.logOut); // auto logic
+
+    const filename = generateSnapshotFilename(eid, name, timestamp, !isLogin);
+    const savedFilename = await saveSnapshotToDisk(data.snapshot, filename);
+
+    if(isLogin) {
+        // Log In → create new record
         const entry = {
             text: data.text,
             type: data.type,
@@ -763,22 +654,93 @@ async function saveLogItem(data) {
             timestamp: timestamp
         };
         await addRecord(entry);
-    } else {
-        const filename = generateSnapshotFilename(eid, name, timestamp, true);
-        const savedFilename = await saveSnapshotToDisk(data.snapshot, filename);
         
-        await updateRecord(existing.id, {
-            logOut: now,
-            filename: savedFilename, 
-            timestamp: timestamp
+        // Play LOGIN sound (loginSucc.mp3)
+        console.log('Playing login audio (loginSucc.mp3)');
+        loginAudio.currentTime = 0;
+        loginAudio.play().catch(e => {
+            console.log('Login audio play failed:', e);
+            if (e.name === 'NotAllowedError') {
+                console.log('Audio blocked. Click "Start camera" button first.');
+            }
         });
+    } else {
+        // Log Out → update last record
+        if(existing) {
+            await updateRecord(existing.id, {
+                logOut: now,
+                filename: savedFilename, 
+                timestamp: timestamp
+            });
+            
+            // Play LOGOUT sound (ingat.mp3)
+            console.log('Playing logout audio (loginSucc.mp3)');
+            logoutAudio.currentTime = 0;
+            logoutAudio.play().catch(e => {
+                console.log('Logout audio play failed:', e);
+                if (e.name === 'NotAllowedError') {
+                    console.log('Audio blocked. Click "Start camera" button first.');
+                }
+            });
+        } else {
+            // If no existing record, fallback → create new row as logOut only
+            const entry = {
+                text: data.text,
+                type: data.type,
+                eid: eid,
+                name: name,
+                date: today,
+                logIn: '',
+                logOut: now,
+                filename: savedFilename, 
+                timestamp: timestamp
+            };
+            await addRecord(entry);
+            
+            // Play LOGIN sound for new entry (since it's a first entry)
+            console.log('Playing login audio for first entry (loginSucc.mp3)');
+            loginAudio.currentTime = 0;
+            loginAudio.play().catch(e => {
+                console.log('Login audio play failed:', e);
+                if (e.name === 'NotAllowedError') {
+                    console.log('Audio blocked. Click "Start camera" button first.');
+                }
+            });
+        }
     }
 
     renderLog();
+    // 🔊 Play correct sound based on selected mode
+    playModeAudio(isLogin);
+
+}
+
+async function getAllRecords() {
+  if (!db) await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const index = store.index('timestamp');
+    const request = index.openCursor(null, 'prev');
+    const results = [];
+    
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        results.push(cursor.value);
+        cursor.continue();
+      } else {
+        resolve(results);
+      }
+    };
+    
+    request.onerror = () => reject(request.error);
+  });
 }
 
 async function renderLog() {
-    const recentScans = await getRecords(10);
+    // Remove the limit parameter to get ALL records instead of just 10
+    const recentScans = await getRecords(); // Changed from getRecords(10) to getRecords()
     const totalCount = await getRecordsCount();
 
     const logCounter = document.getElementById('logCounter') || createLogCounter();
@@ -786,8 +748,24 @@ async function renderLog() {
     const hasFileAccess = await checkDirectoryPermission();
     const accessStatus = hasFileAccess ? '✓ Disk Storage' : '⚠ Request Folder Access';
     
-    logCounter.textContent = `Recent: ${recentScans.length} | Total: ${totalCount} | ${accessStatus}`;
+    // Update counter to show all records count
+    logCounter.textContent = `Showing: ${recentScans.length} records | Total: ${totalCount} | ${accessStatus}`;
 
+    // Clear the log element
+    logEl.innerHTML = '';
+    
+    // Check if there are no records
+    if (recentScans.length === 0) {
+        logEl.innerHTML = `
+            <div class="entry" style="text-align: center; color: #aaa; padding: 20px;">
+                <strong>No attendance records found</strong><br>
+                <small>Scan a QR code or make a manual entry to get started</small>
+            </div>
+        `;
+        return;
+    }
+    
+    // Display ALL records
     logEl.innerHTML = recentScans.map(item => {
         const hasFile = item.filename && item.filename !== 'null';
         return `
@@ -800,7 +778,8 @@ async function renderLog() {
             <small>
                 Date: ${item.date} • 
                 Log In: ${item.logIn} • 
-                Log Out: ${item.logOut || '—'}
+                Log Out: ${item.logOut || '—'} •
+                Type: ${item.type || 'scan'}
                 ${hasFile ? `<br>📁 File: ${escapeHtml(item.filename)}` : '<br>⚠ File not saved'}
             </small>
         </div>
@@ -841,10 +820,20 @@ function addFolderAccessButton() {
     controls.appendChild(folderBtn);
 }
 
+async function checkDirectoryPermission() {
+    if (localStorage.getItem('hasDirectoryPermission') === 'true' && 'showDirectoryPicker' in window) {
+        try {
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+    return false;
+}
+
 fileInput.addEventListener('change', handleFileUpload);
 startBtn.addEventListener('click', startCamera);
 stopBtn.addEventListener('click', stopCamera);
-clearLogBtn.addEventListener('click', clearLog);
 
 async function handleFileUpload(e) {
     const file = e.target.files && e.target.files[0];
@@ -892,18 +881,471 @@ async function handleFileUpload(e) {
     img.src = URL.createObjectURL(file);
 }
 
-async function clearLog() {
-    if(confirm('Clear ALL attendance data? This will remove all records from the database.')) {
-        await clearAllRecords();
-        renderLog();
+// Update mode display in lower left corner
+function updateModeDisplay() {
+    const selectedMode = logTypeSelect.value; // 'auto', 'login', or 'logout'
+    const modeText = document.getElementById('modeText');
+    
+    if (modeText) {
+        // Remove all mode classes
+        modeText.classList.remove('auto', 'login', 'logout');
+        
+        // Add current mode class
+        modeText.classList.add(selectedMode);
+        
+        // Update text
+        if (selectedMode === 'auto') {
+            modeText.textContent = 'AUTO';
+        } else if (selectedMode === 'login') {
+            modeText.textContent = 'LOG IN';
+        } else if (selectedMode === 'logout') {
+            modeText.textContent = 'LOG OUT';
+        }
     }
+    
+    // Also update status briefly
+    status.textContent = `Mode set to ${selectedMode === 'auto' ? 'Auto' : selectedMode === 'login' ? 'Log In' : 'Log Out'}`;
+    status.style.color = selectedMode === 'auto' ? '' : selectedMode === 'login' ? '#4CAF50' : '#f44336';
+    
+    // Temporarily show mode, then revert if scanning
+    setTimeout(() => {
+        if (scanning) {
+            status.textContent = 'Scanning...';
+            status.style.color = '';
+        } else {
+            status.textContent = 'Camera is Off';
+            status.style.color = '';
+        }
+    }, 2000);
 }
+
+// Call this when mode changes
+logTypeSelect.addEventListener('change', updateModeDisplay);
+
+// Initialize audio with user interaction
+function initAudio() {
+    // Create a silent audio context to unlock audio on user interaction
+    const unlockAudio = () => {
+        // Play a silent sound to unlock audio
+        const silentAudio = new Audio();
+        silentAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+        silentAudio.volume = 0;
+        
+        silentAudio.play().then(() => {
+            console.log('Audio unlocked');
+            silentAudio.pause();
+        }).catch(e => {
+            console.log('Audio unlock failed:', e);
+        });
+        
+        // Remove event listeners after first interaction
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+    };
+    
+    // Add event listeners for user interaction
+    document.addEventListener('click', unlockAudio, { once: true });
+    document.addEventListener('touchstart', unlockAudio, { once: true });
+    
+    // Also unlock when clicking any button
+    const buttons = document.querySelectorAll('button');
+    buttons.forEach(button => {
+        button.addEventListener('click', unlockAudio, { once: true });
+    });
+}
+
+// Manual entry function
+async function handleManualEntry(isTimeIn) {
+  // Create modal elements if they don't exist
+  let manualModal = document.getElementById('manualModal');
+  if (!manualModal) {
+    manualModal = document.createElement('div');
+    manualModal.id = 'manualModal';
+    manualModal.className = 'manual-modal';
+    manualModal.innerHTML = `
+      <div class="manual-modal-content">
+        <h3 id="manualModalTitle">Manual Entry</h3>
+        <input type="text" id="manualEid" placeholder="Employee ID" />
+        <input type="text" id="manualName" placeholder="Employee Name" />
+        <div class="manual-modal-actions">
+          <button id="manualCancelBtn" style="background: #666;">Cancel</button>
+          <button id="manualSubmitBtn" class="primary">Submit</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(manualModal);
+    
+    // Close modal when clicking outside
+    manualModal.addEventListener('click', (e) => {
+      if (e.target === manualModal) {
+        manualModal.style.display = 'none';
+      }
+    });
+  }
+  
+  const manualEid = document.getElementById('manualEid');
+  const manualName = document.getElementById('manualName');
+  const manualModalTitle = document.getElementById('manualModalTitle');
+  const manualSubmitBtn = document.getElementById('manualSubmitBtn');
+  const manualCancelBtn = document.getElementById('manualCancelBtn');
+  
+  // Clear previous values
+  manualEid.value = '';
+  manualName.value = '';
+  
+  // Set modal title
+  manualModalTitle.textContent = isTimeIn ? 'Manual Time In' : 'Manual Time Out';
+  manualSubmitBtn.textContent = isTimeIn ? 'Time In' : 'Time Out';
+  manualSubmitBtn.style.backgroundColor = isTimeIn ? '#4CAF50' : '#f44336';
+  
+  // Show modal
+  manualModal.style.display = 'flex';
+  
+  // Focus on EID field
+  manualEid.focus();
+  
+  // Return a promise that resolves when user submits
+  return new Promise((resolve) => {
+    const handleSubmit = async () => {
+      const eid = manualEid.value.trim();
+      const name = manualName.value.trim();
+      
+      if (!eid) {
+        alert('Please enter Employee ID');
+        return;
+      }
+      
+      if (!name) {
+        alert('Please enter Employee Name');
+        return;
+      }
+      
+      const today = new Date().toLocaleDateString();
+      const now = new Date().toLocaleTimeString();
+      const timestamp = Date.now();
+      
+      // Create a text representation
+      const text = `${eid} - ${name}`;
+      
+      // Create a snapshot (blank image with text)
+      const snapshotCanvas = document.createElement('canvas');
+      snapshotCanvas.width = 640;
+      snapshotCanvas.height = 480;
+      const snapCtx = snapshotCanvas.getContext('2d');
+      
+      // Fill background
+      snapCtx.fillStyle = '#1a1a2e';
+      snapCtx.fillRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
+      
+      // Add text
+      snapCtx.fillStyle = '#ffffff';
+      snapCtx.font = 'bold 24px Arial';
+      snapCtx.fillText('MANUAL ENTRY', 50, 100);
+      snapCtx.font = '20px Arial';
+      snapCtx.fillText(`EID: ${eid}`, 50, 150);
+      snapCtx.fillText(`Name: ${name}`, 50, 180);
+      snapCtx.fillText(`Date: ${today}`, 50, 210);
+      snapCtx.fillText(`Time: ${now}`, 50, 240);
+      snapCtx.fillText(`Type: ${isTimeIn ? 'Time In' : 'Time Out'}`, 50, 270);
+      
+      const snapshotData = snapshotCanvas.toDataURL('image/jpeg', 0.8);
+      
+      // Save filename if directory access is available
+      let savedFilename = null;
+      if (snapshotDirectoryHandle) {
+        const filename = generateSnapshotFilename(eid, name, timestamp, !isTimeIn);
+        savedFilename = await saveSnapshotToDisk(snapshotData, filename);
+      }
+      
+      // Get all records to check for existing entry
+      const records = await getAllRecords();
+      const todayRecords = records.filter(r => r.eid === eid && r.date === today);
+      
+      let latestRecord = null;
+      if (todayRecords.length) {
+        // Find the most recent record for today
+        latestRecord = todayRecords.reduce((latest, current) => {
+          return (current.timestamp > latest.timestamp) ? current : latest;
+        });
+      }
+      
+      if (isTimeIn) {
+        // Time In: create new record
+        const entry = {
+          text: text,
+          type: 'manual',
+          eid: eid,
+          name: name,
+          date: today,
+          logIn: now,
+          logOut: '',
+          filename: savedFilename,
+          timestamp: timestamp
+        };
+        await addRecord(entry);
+        
+        // Play LOGIN sound (loginSucc.mp3)
+        console.log('Manual Time In: Playing login audio');
+        loginAudio.currentTime = 0;
+        loginAudio.play().catch(e => {
+          console.log('Login audio play failed:', e);
+          if (e.name === 'NotAllowedError') {
+            console.log('Audio blocked by autoplay policy.');
+          }
+        });
+      } else {
+        // Time Out: update last record or create new
+        if (latestRecord && latestRecord.logIn && !latestRecord.logOut) {
+          // Update existing record
+          await updateRecord(latestRecord.id, {
+            logOut: now,
+            filename: savedFilename,
+            timestamp: timestamp
+          });
+          
+          // Play LOGOUT sound (ingat.mp3)
+          console.log('Manual Time Out: Playing logout audio');
+          logoutAudio.currentTime = 0;
+          logoutAudio.play().catch(e => {
+            console.log('Logout audio play failed:', e);
+            if (e.name === 'NotAllowedError') {
+              console.log('Audio blocked by autoplay policy.');
+            }
+          });
+        } else {
+          // Create new record with only time out
+          const entry = {
+            text: text,
+            type: 'manual',
+            eid: eid,
+            name: name,
+            date: today,
+            logIn: '',
+            logOut: now,
+            filename: savedFilename,
+            timestamp: timestamp
+          };
+          await addRecord(entry);
+          
+          // Play LOGIN sound for new entry (since it's first entry of the day)
+          console.log('Manual Time Out (first entry): Playing login audio');
+          loginAudio.currentTime = 0;
+          loginAudio.play().catch(e => {
+            console.log('Login audio play failed:', e);
+            if (e.name === 'NotAllowedError') {
+              console.log('Audio blocked by autoplay policy.');
+            }
+          });
+        }
+      }
+      
+      // Update display
+      renderLog();
+      manualModal.style.display = 'none';
+      
+      // Show success message
+      status.textContent = `Manual ${isTimeIn ? 'Time In' : 'Time Out'} recorded`;
+      status.style.color = '#00ff00';
+      setTimeout(() => {
+        if (scanning) {
+          status.textContent = 'Scanning...';
+          status.style.color = '';
+        } else {
+          status.textContent = 'Camera is Off';
+          status.style.color = '';
+        }
+      }, 2000);
+      
+      resolve();
+    };
+    
+    const handleCancel = () => {
+      manualModal.style.display = 'none';
+      resolve();
+    };
+    
+    // Set up event listeners
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        handleSubmit();
+      } else if (e.key === 'Escape') {
+        handleCancel();
+      }
+    };
+    
+    // Add keydown listener
+    document.addEventListener('keydown', handleKeyDown);
+    
+    // Set up button click handlers
+    manualSubmitBtn.onclick = () => {
+      handleSubmit();
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+    
+    manualCancelBtn.onclick = () => {
+      handleCancel();
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  });
+}
+
+// Check if user is logged in as admin
+function isAdminLoggedIn() {
+  return localStorage.getItem('adminLoggedIn') === 'true';
+}
+
+// Update admin UI based on login state
+function updateAdminUI() {
+  const isAdmin = isAdminLoggedIn();
+  
+  if (isAdmin) {
+    // Show admin buttons
+    viewLogBtn.style.display = 'inline-flex';
+    clearLogBtn.style.display = 'inline-block';
+    adminToggle.textContent = 'Admin Logout';
+    adminToggle.style.background = 'linear-gradient(135deg, #f44336 0%, #c62828 100%)';
+  } else {
+    // Hide admin buttons
+    viewLogBtn.style.display = 'none';
+    clearLogBtn.style.display = 'none';
+    adminToggle.textContent = 'Admin Login';
+    adminToggle.style.background = 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)';
+  }
+}
+
+// Show admin login modal
+function showAdminLogin() {
+  adminUsername.value = '';
+  adminPassword.value = '';
+  adminLoginModal.style.display = 'flex';
+  adminUsername.focus();
+}
+
+// Hide admin login modal
+function hideAdminLogin() {
+  adminLoginModal.style.display = 'none';
+}
+
+// Handle admin login
+function handleAdminLogin() {
+  const username = adminUsername.value.trim();
+  const password = adminPassword.value.trim();
+  
+  if (!username || !password) {
+    alert('Please enter username and password');
+    return;
+  }
+  
+  // Check credentials (in production, use server-side validation)
+  if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+    // Login successful
+    localStorage.setItem('adminLoggedIn', 'true');
+    hideAdminLogin();
+    updateAdminUI();
+    
+    // Show success message
+    status.textContent = 'Admin login successful';
+    status.style.color = '#4CAF50';
+    setTimeout(() => {
+      if (scanning) {
+        status.textContent = 'Scanning...';
+        status.style.color = '';
+      } else {
+        status.textContent = 'Camera is Off';
+        status.style.color = '';
+      }
+    }, 2000);
+  } else {
+    alert('Invalid username or password');
+    adminPassword.value = '';
+    adminPassword.focus();
+  }
+}
+
+// Handle admin logout
+function handleAdminLogout() {
+  if (confirm('Are you sure you want to logout from admin?')) {
+    localStorage.setItem('adminLoggedIn', 'false');
+    updateAdminUI();
+    
+    // Show logout message
+    status.textContent = 'Admin logged out';
+    status.style.color = '#f44336';
+    setTimeout(() => {
+      if (scanning) {
+        status.textContent = 'Scanning...';
+        status.style.color = '';
+      } else {
+        status.textContent = 'Camera is Off';
+        status.style.color = '';
+      }
+    }, 2000);
+  }
+}
+// Initialize admin system
+function initAdminSystem() {
+  // Check initial login state
+  updateAdminUI();
+  
+  // Admin toggle button click
+  adminToggle.addEventListener('click', () => {
+    if (isAdminLoggedIn()) {
+      handleAdminLogout();
+    } else {
+      showAdminLogin();
+    }
+  });
+  
+  // Admin login submit
+  adminLoginSubmit.addEventListener('click', handleAdminLogin);
+  
+  // Admin login cancel
+  adminLoginCancel.addEventListener('click', hideAdminLogin);
+  
+  // Handle Enter key in admin login
+  adminUsername.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      handleAdminLogin();
+    }
+  });
+  
+  adminPassword.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      handleAdminLogin();
+    }
+  });
+  
+  // Close modal when clicking outside
+  adminLoginModal.addEventListener('click', (e) => {
+    if (e.target === adminLoginModal) {
+      hideAdminLogin();
+    }
+  });
+}
+
+async function clearLog() {
+  if(confirm('Clear ALL attendance data? This will remove all records from the database.')) {
+    await clearAllRecords();
+    renderLog();
+  }
+}
+
+clearLogBtn.addEventListener('click', clearLog);
+
+// Manual button event listeners
+manualTimeInBtn.addEventListener('click', () => handleManualEntry(true));
+manualTimeOutBtn.addEventListener('click', () => handleManualEntry(false));
 
 async function initialize() {
     await initDB();
     addFolderAccessButton();
     await checkDirectoryPermission(); 
     renderLog();
+    initAdminSystem();
+    initAudio(); // Initialize audio system
+    
+    // Initialize mode display
+    setTimeout(updateModeDisplay, 100);
 }
 
 initialize();
