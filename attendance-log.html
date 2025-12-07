@@ -35,7 +35,7 @@
     }
 
     .action-button {
-      background: rgba(255,255,255,0.1);
+      background: rgba(216, 202, 202, 0.1);
       border: 1px solid rgba(255,255,255,0.2);
       color: white;
       padding: 8px 16px;
@@ -45,7 +45,7 @@
     }
     
     .action-button:hover {
-      background: rgba(255,255,255,0.2);
+      background: rgba(7, 218, 42, 0.2);
     }
 
     /* --- NEW: Scroll container for attendance table --- */
@@ -138,9 +138,14 @@
     <div class="attendance-container">
       <div class="attendance-header">
         <h1>Attendance Log</h1>
-        <a href="index.html" class="back-button">
-          ← Back to Scanner
-        </a>
+        <div>
+          <button id="adminLogoutBtn" style="background: #f44336; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-right: 10px;">
+            Admin Logout
+          </button>
+          <a href="index.html" class="back-button">
+            ← Back to Scanner
+          </a>
+        </div>
       </div>
 
       <!-- Buttons now sticky -->
@@ -158,5 +163,29 @@
   </div>
 
   <script src="attendance-log.js"></script>
+  <script>
+    // Simple admin check for attendance log page
+    (function() {
+      // Check if admin is logged in
+      const isAdmin = localStorage.getItem('adminLoggedIn') === 'true';
+      
+      if (!isAdmin) {
+        // If not admin, redirect to main page
+        alert('Admin access required');
+        window.location.href = 'index.html';
+      }
+      
+      // Add logout functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        const adminLogoutBtn = document.getElementById('adminLogoutBtn');
+        if (adminLogoutBtn) {
+          adminLogoutBtn.addEventListener('click', function() {
+            localStorage.setItem('adminLoggedIn', 'false');
+            window.location.href = 'index.html';
+          });
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
