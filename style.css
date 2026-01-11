@@ -107,7 +107,7 @@ button:hover {
 }
 
 .log {
-  max-height: 500px; /* Increased slightly to show more records */
+  max-height: 450px; /* Increased slightly to show more records */
   overflow: auto;
   margin-top: 8px;
 }
@@ -457,4 +457,5 @@ footer {
   60%  { opacity: 1; }
   100% { opacity: 0; }
 }
+
 
