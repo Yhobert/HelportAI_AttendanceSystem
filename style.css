@@ -107,7 +107,7 @@ button:hover {
 }
 
 .log {
-  max-height: 420px; /* Increased slightly to show more records */
+  max-height: 1000px; /* Increased slightly to show more records */
   overflow: auto;
   margin-top: 8px;
 }
@@ -438,4 +438,22 @@ footer {
 
 #modeText.logout {
     background: linear-gradient(135deg, #f44336 0%, #c62828 100%);
+}
+
+/* ===== Full Screen Success Blink ===== */
+.screen-flash {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 255, 0, 0.6);
+  z-index: 99999;
+  pointer-events: none;
+  opacity: 0;
+  animation: flashGreen 0.4s ease-in-out;
+}
+
+@keyframes flashGreen {
+  0%   { opacity: 0; }
+  30%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
 }
