@@ -20,6 +20,10 @@ const adminPassword = document.getElementById('adminPassword');
 const adminLoginSubmit = document.getElementById('adminLoginSubmit');
 const adminLoginCancel = document.getElementById('adminLoginCancel');
 const viewLogBtn = document.getElementById('viewLogBtn');
+const SAME_PERSON_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+// Prevent same person rapid re-scan (10-minute rule)
+let lastScanByPerson = {};
+
 
 // Admin credentials (in production, use proper authentication)
 const ADMIN_CREDENTIALS = {
@@ -132,6 +136,42 @@ function showNotification(message, type = 'success') {
         }, 300);
     });
 }
+
+function flashGreenScreen() {
+    const flash = document.createElement('div');
+    flash.className = 'screen-flash';
+    document.body.appendChild(flash);
+
+    // Remove after animation
+    setTimeout(() => {
+        flash.remove();
+    }, 400);
+}
+
+function triggerSuccessFeedback(isLogin, displayName) {
+    // Fallback display name
+    const name = displayName || 'User';
+
+    // Notification
+    showNotification(
+        `✓ ${name} - ${isLogin ? 'Time In' : 'Time Out'} Successful!`,
+        'success'
+    );
+
+    // Flash green screen
+    flashGreenScreen();
+
+    // Play correct audio
+    const audio = isLogin ? loginAudio : logoutAudio;
+    audio.currentTime = 0;
+    audio.play().catch(e => {
+        console.log(`${isLogin ? 'Login' : 'Logout'} audio play failed:`, e);
+        if (e.name === 'NotAllowedError') {
+            console.log('Audio blocked. Click Start Camera first.');
+        }
+    });
+}
+
 
 // File System Access API - Request directory permission
 async function requestDirectoryPermission() {
@@ -640,25 +680,94 @@ function clearOverlay() {
     ctx.clearRect(0, 0, overlay.width, overlay.height);
 }
 
-let lastSeen = null;
+function parsePerson(text) {
+    text = (text || "").trim();
+
+    let eid = "";
+    let name = "";
+
+    if (text.match(/^\d+\s*[-:]\s*[A-Za-z]/)) {
+        const parts = text.split(/[-:]/);
+        eid = parts[0].trim();
+        name = parts.slice(1).join('-').trim();
+    } else if (text.match(/[A-Za-z].*[-:]\s*\d+$/)) {
+        const parts = text.split(/[-:]/);
+        name = parts[0].trim();
+        eid = parts.slice(1).join('-').trim();
+    } else if (/^\d+$/.test(text)) {
+        eid = text;
+    } else {
+        name = text;
+    }
+
+    return {
+        eid: eid.toLowerCase(),
+        name: name.toLowerCase()
+    };
+}
+
 async function handleResult(text, type) {
     if (!text) return;
-    const now = new Date();
 
-    if (lastSeen && lastSeen.text === text && (now - lastSeen.time) < 2000) return;
-    lastSeen = { text: text, time: now };
-    
-    lastResult.textContent = text;
-    status.textContent = 'Detected!';
-    status.style.color = '#00ff00';
+    const now = Date.now();
+    const today = new Date().toLocaleDateString();
 
-    setTimeout(() => {
-        if(scanning) {
-            status.textContent = 'Scanning...';
-            status.style.color = '';
+    // 🔍 Identify person
+    const person = parsePerson(text);
+    const personKey = `${person.eid}|${person.name}`;
+
+    // 🔎 Check latest record to know if this is LOGIN or LOGOUT
+    const allRecords = await getAllRecords();
+    const todayRecords = allRecords.filter(r =>
+        r.date === today &&
+        (r.eid?.toLowerCase() === person.eid || r.name?.toLowerCase() === person.name)
+    );
+
+    let latestRecord = null;
+    if (todayRecords.length) {
+        latestRecord = todayRecords.reduce((a, b) =>
+            a.timestamp > b.timestamp ? a : b
+        );
+    }
+
+    // 🧠 Determine action
+    let isLogin = true;
+
+    if (logTypeSelect.value === 'login') {
+        isLogin = true;
+    } else if (logTypeSelect.value === 'logout') {
+        isLogin = false;
+    } else {
+        // AUTO mode
+        if (latestRecord && latestRecord.logIn && !latestRecord.logOut) {
+            isLogin = false; // logout
         }
-    }, 1000);
+    }
 
+    const blockIntervalMs = SAME_PERSON_INTERVAL_MS; // 10 minutes
+
+    if (lastScanByPerson[personKey]) {
+    const diff = now - lastScanByPerson[personKey];
+    if (diff < blockIntervalMs) {
+        const action = isLogin ? 'Login' : 'Logout';
+        showNotification(
+            `Same person detected. ${action} allowed after ${Math.ceil((blockIntervalMs - diff)/60000)} minutes.`,
+            'warning'
+        );
+        return;
+    }
+}
+
+// Record scan time for both login and logout
+lastScanByPerson[personKey] = now;
+
+
+    // ✅ Record scan time ONLY for LOGIN
+    if (isLogin) {
+        lastScanByPerson[personKey] = now;
+    }
+
+    // 📸 Snapshot
     const snapshotCanvas = document.createElement('canvas');
     snapshotCanvas.width = video.videoWidth;
     snapshotCanvas.height = video.videoHeight;
@@ -672,10 +781,12 @@ async function handleResult(text, type) {
         snapshot: snapshotData
     });
 
+    // 🌐 Open links
     if (/^https?:\/\//i.test(text)) {
         window.open(text, '_blank', 'noopener,noreferrer');
     }
 }
+
 
 async function saveLogItem(data) {
     const today = new Date().toLocaleDateString();
@@ -762,86 +873,56 @@ async function saveLogItem(data) {
     const filename = generateSnapshotFilename(eid, name, timestamp, !isLogin);
     const savedFilename = await saveSnapshotToDisk(data.snapshot, filename);
 
-    if(isLogin) {
-        // Log In → create new record
+    if (isLogin) {
+    // Time In record
+    const entry = {
+        text: data.text,
+        type: data.type,
+        eid: eid,
+        name: name,
+        date: today,
+        logIn: now,
+        logOut: '',
+        filename: savedFilename, 
+        timestamp: timestamp
+    };
+    await addRecord(entry);
+
+    // ✅ Unified feedback
+    triggerSuccessFeedback(true, name || eid || text);
+
+} else {
+    // Time Out
+    if(latestRecord) {
+        await updateRecord(latestRecord.id, {
+            logOut: now,
+            filename: savedFilename, 
+            timestamp: timestamp
+        });
+
+        // ✅ Unified feedback
+        triggerSuccessFeedback(false, latestRecord.name || latestRecord.eid || latestRecord.text);
+
+    } else {
+        // First entry today as Time Out
         const entry = {
             text: data.text,
             type: data.type,
             eid: eid,
             name: name,
             date: today,
-            logIn: now,
-            logOut: '',
+            logIn: '',
+            logOut: now,
             filename: savedFilename, 
             timestamp: timestamp
         };
         await addRecord(entry);
-        
-        // Show success notification
-        const displayName = name || eid || text;
-        showNotification(`✓ ${displayName} - Time In Successful!`, 'success');
-        
-        // Play LOGIN sound (loginSucc.mp3)
-        console.log('Playing login audio (loginSucc.mp3)');
-        loginAudio.currentTime = 0;
-        loginAudio.play().catch(e => {
-            console.log('Login audio play failed:', e);
-            if (e.name === 'NotAllowedError') {
-                console.log('Audio blocked. Click "Start camera" button first.');
-            }
-        });
-    } else {
-        // Log Out → update last record
-        if(latestRecord) {
-            await updateRecord(latestRecord.id, {
-                logOut: now,
-                filename: savedFilename, 
-                timestamp: timestamp
-            });
-            
-            // Show success notification
-            const displayName = latestRecord.name || latestRecord.eid || latestRecord.text;
-            showNotification(`✓ ${displayName} - Time Out Successful!`, 'success');
-            
-            // Play LOGOUT sound (ingat.mp3)
-            console.log('Playing logout audio (ingat.mp3)');
-            logoutAudio.currentTime = 0;
-            logoutAudio.play().catch(e => {
-                console.log('Logout audio play failed:', e);
-                if (e.name === 'NotAllowedError') {
-                    console.log('Audio blocked. Click "Start camera" button first.');
-                }
-            });
-        } else {
-            // If no existing record, fallback → create new row as logOut only
-            const entry = {
-                text: data.text,
-                type: data.type,
-                eid: eid,
-                name: name,
-                date: today,
-                logIn: '',
-                logOut: now,
-                filename: savedFilename, 
-                timestamp: timestamp
-            };
-            await addRecord(entry);
-            
-            // Show info notification (first entry of the day as time out)
-            const displayName = name || eid || text;
-            showNotification(`ℹ ${displayName} - First Entry Today Recorded as Time Out`, 'info');
-            
-            // Play LOGIN sound for new entry (since it's a first entry)
-            console.log('Playing login audio for first entry (loginSucc.mp3)');
-            loginAudio.currentTime = 0;
-            loginAudio.play().catch(e => {
-                console.log('Login audio play failed:', e);
-                if (e.name === 'NotAllowedError') {
-                    console.log('Audio blocked. Click "Start camera" button first.');
-                }
-            });
-        }
+
+        // ✅ Unified feedback
+        triggerSuccessFeedback(false, name || eid || text);
     }
+}
+
 
     renderLog();
 }
